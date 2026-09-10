@@ -19,7 +19,7 @@ export default function StokPage() {
   const [userId, setUserId] = useState(null);
 
   const [inForm, setInForm] = useState({ product_id: "", qty: "", cost_price: "", supplier_id: "", note: "" });
-  const [corrForm, setCorrForm] = useState({ product_id: "", qty: "", reason: "", linkSupplierReturn: false, supplier_id: "" });
+  const [corrForm, setCorrForm] = useState({ product_id: "", qty: "", reason: "" });
 
   useEffect(() => {
     load();
@@ -106,25 +106,9 @@ export default function StokPage() {
         note: corrForm.reason || null,
         created_by: userId,
       });
-
-      // Kalau ditandai "Retur ke Supplier", barang yang sama langsung muncul
-      // di daftar retur (belum diambil) tanpa mengurangi stok lagi -- stok
-      // sudah dipotong oleh koreksi di atas.
-      if (corrForm.linkSupplierReturn && corrForm.supplier_id) {
-        await supabase.from("returns").insert({
-          return_type: "supplier",
-          product_id: corrForm.product_id,
-          qty,
-          reason: corrForm.reason || null,
-          reference_supplier_id: corrForm.supplier_id,
-          pickup_status: "belum_diambil",
-          created_by: userId,
-        });
-      }
-
       await logActivity(supabase, { userId, action: "stock_correction", entity: "products", entityId: corrForm.product_id, details: { qty } });
-      toast.success(corrForm.linkSupplierReturn ? "Koreksi dicatat & masuk daftar retur supplier" : "Koreksi stok dicatat");
-      setCorrForm({ product_id: "", qty: "", reason: "", linkSupplierReturn: false, supplier_id: "" });
+      toast.success("Koreksi stok dicatat");
+      setCorrForm({ product_id: "", qty: "", reason: "" });
       load();
     } catch (err) {
       toast.error(err.message);
@@ -184,29 +168,6 @@ export default function StokPage() {
             <Input label="Jumlah Dikurangi" type="number" placeholder="contoh: 25" value={corrForm.qty} onChange={(e) => setCorrForm({ ...corrForm, qty: e.target.value })} />
           </div>
           <Textarea label="Alasan Koreksi" placeholder="Barang rusak / telur pecah / susut" value={corrForm.reason} onChange={(e) => setCorrForm({ ...corrForm, reason: e.target.value })} className="mt-3" rows={2} />
-
-          <div className="mt-3 border border-border rounded-lg p-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={corrForm.linkSupplierReturn}
-                onChange={(e) => setCorrForm({ ...corrForm, linkSupplierReturn: e.target.checked })}
-              />
-              Barang ini mau diretur ke supplier (masuk daftar retur, belum langsung diambil)
-            </label>
-            {corrForm.linkSupplierReturn && (
-              <Select
-                label="Supplier"
-                value={corrForm.supplier_id}
-                onChange={(e) => setCorrForm({ ...corrForm, supplier_id: e.target.value })}
-                className="mt-2"
-              >
-                <option value="">-- pilih supplier --</option>
-                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-            )}
-          </div>
-
           <div className="flex justify-end mt-4">
             <Button variant="danger" onClick={submitCorrection} disabled={saving}>{saving ? "Menyimpan..." : "Simpan Koreksi"}</Button>
           </div>

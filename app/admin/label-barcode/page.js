@@ -7,7 +7,6 @@ import { Button, Card, Input, Select, Toggle, EmptyState } from "@/components/ui
 import { useBarcodeScan } from "@/lib/useBarcodeScan";
 import { printBarcodeLabels } from "@/lib/printBarcodeLabel";
 import { formatRupiah } from "@/lib/format";
-import { findBarcodeConflict } from "@/lib/checkBarcodeOwner";
 
 export default function LabelBarcodePage() {
   const supabase = createClient();
@@ -55,15 +54,6 @@ export default function LabelBarcodePage() {
 
   async function submitBarcode() {
     if (!form.product_id || !form.barcode) return toast.error("Pilih barang dan isi kode barcode");
-
-    const conflict = await findBarcodeConflict(supabase, form.barcode, {
-      excludeBarcodeId: form.editingId,
-      excludeProductId: form.product_id,
-    });
-    if (conflict) {
-      return toast.error(`Barcode "${form.barcode}" sudah dipakai oleh produk "${conflict.name}". Satu barcode hanya untuk satu produk.`);
-    }
-
     setSaving(true);
     try {
       if (form.editingId) {

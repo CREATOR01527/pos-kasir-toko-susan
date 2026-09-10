@@ -8,12 +8,13 @@ import { formatRupiah, formatNumber } from "@/lib/format";
 import { BARCODE_EVENT } from "./ScannerProvider";
 
 // Widget ini TIDAK aktif di halaman yang sudah punya penanganan scan sendiri
-// (Kasir menambah ke keranjang; Produk/Label&Barcode/Retur/Pembelian mengisi
+// (Kasir menambah ke keranjang; Produk/Stok/Label&Barcode/Retur/Pembelian mengisi
 // kolom form/pencarian masing-masing). Di halaman admin LAIN yang belum punya
 // penanganan khusus, hasil scan ditampilkan sebagai info singkat: nama, harga, stok.
 const PAGES_WITH_OWN_HANDLING = [
   "/kasir",
   "/admin/produk",
+  "/admin/stok",
   "/admin/label-barcode",
   "/admin/retur",
   "/admin/pembelian",

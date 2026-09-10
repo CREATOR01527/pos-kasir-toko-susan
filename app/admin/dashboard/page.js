@@ -30,7 +30,6 @@ export default function DashboardPage() {
   const [dailyTrend, setDailyTrend] = useState([]);
   const [todayProfit, setTodayProfit] = useState(0);
   const [supplierDebt, setSupplierDebt] = useState({ outstanding: [], totalOutstanding: 0, paidTransfer: 0, paidCash: 0 });
-  const [pendingReturns, setPendingReturns] = useState([]);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -51,7 +50,7 @@ export default function DashboardPage() {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    const [{ data: tToday }, { data: tMonth }, { data: items }, { data: products }, { data: recentTx }, { data: trend }, { data: todayItems }, { data: pos }, { data: payments }, { data: pendingRet }] =
+    const [{ data: tToday }, { data: tMonth }, { data: items }, { data: products }, { data: recentTx }, { data: trend }, { data: todayItems }, { data: pos }, { data: payments }] =
       await Promise.all([
         supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", today),
         supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", monthStart),
@@ -81,12 +80,6 @@ export default function DashboardPage() {
           .gt("remaining_debt", 0)
           .order("created_at", { ascending: false }),
         supabase.from("supplier_payments").select("amount, method"),
-        supabase
-          .from("returns")
-          .select("*, products(name), suppliers:reference_supplier_id(name)")
-          .eq("return_type", "supplier")
-          .eq("pickup_status", "belum_diambil")
-          .order("created_at", { ascending: false }),
       ]);
 
     setTodayTx(tToday || []);
@@ -132,7 +125,6 @@ export default function DashboardPage() {
     const paidCash = (payments || []).filter((p) => p.method === "cash").reduce((s, p) => s + Number(p.amount), 0);
     const totalOutstanding = (pos || []).reduce((s, p) => s + Number(p.remaining_debt), 0);
     setSupplierDebt({ outstanding: pos || [], totalOutstanding, paidTransfer, paidCash });
-    setPendingReturns(pendingRet || []);
 
     setLoading(false);
   }
@@ -166,12 +158,6 @@ export default function DashboardPage() {
   const monthRevenue = monthTx.reduce((s, t) => s + Number(t.total), 0);
   const monthProfit = topProducts.reduce((s, p) => s + p.profit, 0);
 
-  const PAYMENT_LABELS = { tunai: "Tunai", transfer: "Transfer", qris: "QRIS", kasbon: "Kasbon" };
-  const paymentBreakdown = Object.keys(PAYMENT_LABELS).map((method) => {
-    const txs = todayTx.filter((t) => t.payment_method === method);
-    return { method, label: PAYMENT_LABELS[method], count: txs.length, total: txs.reduce((s, t) => s + Number(t.total), 0) };
-  });
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -203,18 +189,6 @@ export default function DashboardPage() {
               <Bar dataKey="total" fill="var(--primary)" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      </Card>
-
-      <Card title="Penjualan per Metode Pembayaran (Hari Ini)">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {paymentBreakdown.map((p) => (
-            <div key={p.method} className="border border-border rounded-lg p-3">
-              <p className="text-xs text-ink-muted">{p.label}</p>
-              <p className="text-base font-semibold mt-0.5">{formatRupiah(p.total)}</p>
-              <p className="text-xs text-ink-muted mt-0.5">{p.count} transaksi</p>
-            </div>
-          ))}
         </div>
       </Card>
 
@@ -271,36 +245,6 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
-        </Card>
-      )}
-
-      {pendingReturns.length > 0 && (
-        <Card title="Barang Retur ke Supplier (Belum Diambil)">
-          <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs text-ink-muted border-b border-border">
-                <tr>
-                  <th className="text-left py-2 pr-3 font-medium">Barang</th>
-                  <th className="text-left py-2 pr-3 font-medium">Supplier</th>
-                  <th className="text-right py-2 pr-3 font-medium">Jumlah</th>
-                  <th className="text-left py-2 pr-3 font-medium">Alasan</th>
-                  <th className="text-left py-2 font-medium">Tanggal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingReturns.map((r) => (
-                  <tr key={r.id} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-3">{r.products?.name}</td>
-                    <td className="py-2 pr-3">{r.suppliers?.name || "-"}</td>
-                    <td className="py-2 pr-3 text-right">{formatNumber(r.qty, 2)}</td>
-                    <td className="py-2 pr-3 text-ink-muted">{r.reason || "-"}</td>
-                    <td className="py-2 text-ink-muted">{formatDateTime(r.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs text-ink-muted mt-3">Tandai sebagai "Sudah Diambil" di halaman Retur Barang setelah supplier mengambilnya.</p>
         </Card>
       )}
 
