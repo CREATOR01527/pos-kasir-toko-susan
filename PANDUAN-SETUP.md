@@ -23,7 +23,7 @@ Ikuti urutan ini dari atas ke bawah. Total waktu sekitar 30-45 menit untuk yang 
 3. Buka file `supabase/schema.sql` dari folder aplikasi (hasil unduhan sebelumnya), **copy semua isinya**.
 4. Tempel ke SQL Editor, klik **Run** (atau Ctrl+Enter).
 5. Pastikan muncul tulisan **Success. No rows returned** — berarti semua tabel berhasil dibuat.
-6. Ulangi langkah yang sama untuk file `supabase/migration-02-fitur-tambahan.sql`, `supabase/migration-03-perbaikan.sql`, `supabase/migration-04-harga-bertingkat.sql`, `supabase/migration-05-retur-dan-metode-bayar.sql`, `supabase/migration-06-barcode-unik-dan-nota.sql`, lalu `supabase/migration-07-catatan-item-pembelian.sql` (New query → copy isi file → Run, berurutan).
+6. Ulangi langkah yang sama untuk file `supabase/migration-02-fitur-tambahan.sql`, `supabase/migration-03-perbaikan.sql`, `supabase/migration-04-harga-bertingkat.sql`, `supabase/migration-05-retur-dan-metode-bayar.sql`, `supabase/migration-06-barcode-unik-dan-nota.sql`, lalu `supabase/migration-07-catatan-item-pembelian.sql`, lalu `supabase/migration-08-pengaturan-struk.sql` (New query → copy isi file → Run, berurutan).
 
 > Jika muncul error "relation already exists", berarti Anda menjalankannya dua kali — aman, abaikan saja.
 

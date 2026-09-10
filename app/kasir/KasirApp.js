@@ -8,6 +8,7 @@ import { formatRupiah, formatNumber } from "@/lib/format";
 import { getPriceVariants } from "@/lib/pricing";
 import { logActivity } from "@/lib/logActivity";
 import { openCashDrawer } from "@/lib/cashDrawer";
+import { printReceipt } from "@/lib/printReceipt";
 import { useScanner, BARCODE_EVENT } from "@/components/ScannerProvider";
 import ScannerStatusWidget from "@/components/ScannerStatusWidget";
 import { speakProductName, isVoiceEnabled, setVoiceEnabled } from "@/lib/voice";
@@ -19,6 +20,7 @@ import QtyModal from "./components/QtyModal";
 import PaymentModal from "./components/PaymentModal";
 import PendingListModal from "./components/PendingListModal";
 import CameraScannerModal from "./components/CameraScannerModal";
+import ReceiptModal from "./components/ReceiptModal";
 import { Volume2, VolumeX, Search, Hash, PauseCircle, RotateCcw, CreditCard, PackageOpen } from "lucide-react";
 
 export default function KasirApp({ profile, isAdminAccount, impersonating, initialShift, products, customers, settings, pendingTransactions }) {
@@ -44,6 +46,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [search, setSearch] = useState("");
   const [deliveryFee, setDeliveryFee] = useState("");
+  const [manualDiscount, setManualDiscount] = useState("");
   const [customerId, setCustomerId] = useState("");
 
   const [variantProduct, setVariantProduct] = useState(null);
@@ -56,6 +59,8 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
   const [closeShiftOpen, setCloseShiftOpen] = useState(false);
   const { physicalActive, phoneConnected } = useScanner();
   const [voiceOn, setVoiceOn] = useState(true);
+  const [lastReceipt, setLastReceipt] = useState(null);
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
   useEffect(() => {
     setVoiceOn(isVoiceEnabled());
@@ -81,11 +86,13 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
   const totals = useMemo(() => {
     const subtotal = cart.reduce((s, i) => s + i.unit_price * i.qty, 0);
     const discountPercent = customer?.discount_percent || 0;
-    const discount = Math.round((subtotal * discountPercent) / 100);
+    const percentDiscount = Math.round((subtotal * discountPercent) / 100);
+    const manualDiscountAmount = Math.max(0, parseFloat(manualDiscount) || 0);
+    const discount = percentDiscount + manualDiscountAmount;
     const delivery = parseFloat(deliveryFee) || 0;
     const total = Math.max(0, subtotal - discount + delivery);
-    return { subtotal, discount, delivery, total };
-  }, [cart, customer, deliveryFee]);
+    return { subtotal, discount, percentDiscount, manualDiscountAmount, delivery, total };
+  }, [cart, customer, deliveryFee, manualDiscount]);
 
   // ---------- Tambah item ke keranjang ----------
   const addToCart = useCallback((product, variant) => {
@@ -240,6 +247,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
     setCart([]);
     setSelectedIndex(-1);
     setDeliveryFee("");
+    setManualDiscount("");
     setCustomerId("");
   }
 
@@ -349,6 +357,16 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
     setCart(items);
     setCustomerId(tx.customer_id || "");
     setDeliveryFee(tx.delivery_fee ? String(tx.delivery_fee) : "");
+
+    // Diskon tersimpan di tx.discount adalah gabungan diskon persen pelanggan +
+    // diskon manual. Diskon persen dihitung ulang dari subtotal saat ini supaya
+    // sisanya (diskon manual) bisa dipulihkan ke kolom Diskon Manual.
+    const recallCustomer = customers.find((c) => c.id === (tx.customer_id || ""));
+    const recallSubtotal = items.reduce((s, i) => s + i.unit_price * i.qty, 0);
+    const recallPercentDiscount = Math.round((recallSubtotal * (recallCustomer?.discount_percent || 0)) / 100);
+    const recallManualDiscount = Math.max(0, Number(tx.discount || 0) - recallPercentDiscount);
+    setManualDiscount(recallManualDiscount ? String(recallManualDiscount) : "");
+
     setPendingList((prev) => prev.filter((t) => t.id !== tx.id));
     setPendingOpen(false);
 
@@ -457,6 +475,19 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         details: { total: totals.total, method },
       });
 
+      const receiptData = {
+        store: settings,
+        tx,
+        items: cart.map((i) => ({ name: i.name, price_type: i.price_type, qty: i.qty, unit_price: i.unit_price })),
+        cashierName: profile.full_name,
+        customerName: customer?.name || null,
+      };
+      setLastReceipt(receiptData);
+      setReceiptModalOpen(true);
+      if (settings?.receipt_auto_print !== false) {
+        printReceipt(receiptData);
+      }
+
       toast.success("Transaksi berhasil!");
       resetCart();
       setPaymentOpen(false);
@@ -539,6 +570,13 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
           >
             Scan via Kamera HP
+          </button>
+          <button
+            onClick={() => lastReceipt && setReceiptModalOpen(true)}
+            disabled={!lastReceipt}
+            className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Lihat / Cetak Ulang Struk Terakhir
           </button>
           <button
             onClick={() => {
@@ -661,6 +699,15 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         {/* Ringkasan & shortkey */}
         <div className="border-t border-border bg-surface p-4">
           <div className="flex items-center gap-3 mb-3">
+            <label className="text-sm text-ink-muted whitespace-nowrap">Diskon</label>
+            <input
+              value={manualDiscount}
+              onChange={(e) => setManualDiscount(e.target.value)}
+              onWheel={(e) => e.currentTarget.blur()}
+              inputMode="numeric"
+              placeholder="0"
+              className="w-28 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-right outline-none focus:ring-2 focus:ring-primary/40"
+            />
             <label className="text-sm text-ink-muted whitespace-nowrap">Biaya Antar</label>
             <input
               value={deliveryFee}
@@ -672,6 +719,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             />
             <div className="flex-1" />
             <div className="text-right">
+              {totals.discount > 0 && <p className="text-xs text-danger">Diskon -{formatRupiah(totals.discount)}</p>}
               <p className="text-xs text-ink-muted">Total</p>
               <p className="text-xl font-semibold">{formatRupiah(totals.total)}</p>
             </div>
@@ -746,6 +794,14 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
           onClosed={async () => {
             await handleLogout();
           }}
+        />
+      )}
+
+      {receiptModalOpen && lastReceipt && (
+        <ReceiptModal
+          data={lastReceipt}
+          onPrint={() => printReceipt(lastReceipt)}
+          onClose={() => setReceiptModalOpen(false)}
         />
       )}
     </div>

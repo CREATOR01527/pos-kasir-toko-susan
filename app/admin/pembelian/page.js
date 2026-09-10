@@ -587,10 +587,12 @@ export default function PembelianPage() {
                         type="checkbox"
                         checked={correctionForm.linkSupplierReturn}
                         onChange={(e) => setCorrectionForm({ ...correctionForm, linkSupplierReturn: e.target.checked })}
-                        disabled={!form.supplier_id}
                       />
                       Retur ke supplier ini (masuk daftar retur, belum diambil)
                     </label>
+                    {correctionForm.linkSupplierReturn && !form.supplier_id && (
+                      <p className="text-xs text-danger -mt-1.5">Pilih Supplier di form pesanan (atas) dulu sebelum menerapkan koreksi ini.</p>
+                    )}
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" onClick={() => { setCorrectionOpen(false); setCorrectionForm({ itemIndex: "", qty: "", reason: "", linkSupplierReturn: false }); }}>Batal</Button>
                       <Button variant="danger" onClick={applyCorrection}>Terapkan Koreksi</Button>

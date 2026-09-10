@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
-import { Button, Card, Input, Select, Textarea } from "@/components/ui/kit";
+import { Button, Card, Input, Select, Textarea, Toggle } from "@/components/ui/kit";
 import { LOGIN_FONTS, LOGIN_FONT_WEIGHTS } from "@/lib/loginFonts";
 
 export default function PengaturanPage() {
@@ -52,6 +52,49 @@ export default function PengaturanPage() {
         </div>
         <Textarea label="Alamat Toko" value={form.store_address || ""} onChange={(e) => setForm({ ...form, store_address: e.target.value })} rows={2} className="mt-3" />
         <Textarea label="Catatan Kaki Struk" value={form.receipt_footer || ""} onChange={(e) => setForm({ ...form, receipt_footer: e.target.value })} rows={2} className="mt-3" />
+      </Card>
+
+      <Card title="Pengaturan Struk">
+        <p className="text-xs text-ink-muted mb-3">
+          Struk dicetak otomatis setelah transaksi kasir selesai (kalau &quot;Cetak Otomatis&quot; aktif),
+          atau bisa dicetak ulang manual lewat tombol &quot;Cetak Ulang Struk Terakhir&quot; di layar Kasir.
+        </p>
+        <Select
+          label="Ukuran Kertas Printer"
+          value={form.receipt_paper_size || "58mm"}
+          onChange={(e) => setForm({ ...form, receipt_paper_size: e.target.value })}
+          className="max-w-xs mb-4"
+        >
+          <option value="58mm">58mm</option>
+          <option value="80mm">80mm</option>
+        </Select>
+        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+          <Toggle
+            checked={form.receipt_auto_print !== false}
+            onChange={(v) => setForm({ ...form, receipt_auto_print: v })}
+            label="Cetak otomatis setelah bayar"
+          />
+          <Toggle
+            checked={form.receipt_show_cashier !== false}
+            onChange={(v) => setForm({ ...form, receipt_show_cashier: v })}
+            label="Tampilkan nama kasir"
+          />
+          <Toggle
+            checked={form.receipt_show_customer !== false}
+            onChange={(v) => setForm({ ...form, receipt_show_customer: v })}
+            label="Tampilkan nama pelanggan"
+          />
+          <Toggle
+            checked={form.receipt_show_address !== false}
+            onChange={(v) => setForm({ ...form, receipt_show_address: v })}
+            label="Tampilkan alamat toko"
+          />
+          <Toggle
+            checked={form.receipt_show_phone !== false}
+            onChange={(v) => setForm({ ...form, receipt_show_phone: v })}
+            label="Tampilkan telepon toko"
+          />
+        </div>
       </Card>
 
       <Card title="Info Pembayaran (Transfer & QRIS Manual)">

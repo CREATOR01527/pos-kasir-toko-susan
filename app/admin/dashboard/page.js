@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
 import { formatRupiah, formatNumber, formatDateTime, formatDate } from "@/lib/format";
 import { exportToCsv } from "@/lib/exportCsv";
-import { StatCard, Card, EmptyState, Button } from "@/components/ui/kit";
+import { StatCard, Card, EmptyState, Button, Input } from "@/components/ui/kit";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 function startOfDay(d) {
@@ -32,6 +33,11 @@ export default function DashboardPage() {
   const [supplierDebt, setSupplierDebt] = useState({ outstanding: [], totalOutstanding: 0, paidTransfer: 0, paidCash: 0 });
   const [pendingReturns, setPendingReturns] = useState([]);
   const [exporting, setExporting] = useState(false);
+
+  const [historyStart, setHistoryStart] = useState("");
+  const [historyEnd, setHistoryEnd] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyResult, setHistoryResult] = useState(null);
 
   useEffect(() => {
     load();
@@ -162,6 +168,67 @@ export default function DashboardPage() {
     }
   }
 
+  // Cek History: rangkum penjualan di antara tanggal mulai & akhir yang dipilih
+  // admin (contoh: 01/09/2026 - 14/09/2026), terpisah dari kartu "Hari Ini"/"Bulan Ini".
+  async function loadHistory() {
+    if (!historyStart || !historyEnd) return toast.error("Pilih tanggal mulai dan tanggal akhir dulu");
+    if (historyStart > historyEnd) return toast.error("Tanggal mulai tidak boleh setelah tanggal akhir");
+    setHistoryLoading(true);
+    try {
+      const rangeStart = new Date(`${historyStart}T00:00:00`).toISOString();
+      const rangeEnd = new Date(`${historyEnd}T23:59:59.999`).toISOString();
+
+      const [{ data: txs }, { data: items }] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("*, profiles(full_name), customers(name)")
+          .eq("status", "completed")
+          .gte("created_at", rangeStart)
+          .lte("created_at", rangeEnd)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("transaction_items")
+          .select("product_id, qty, subtotal, cost_price_snapshot, products(name)")
+          .gte("created_at", rangeStart)
+          .lte("created_at", rangeEnd),
+      ]);
+
+      const map = new Map();
+      (items || []).forEach((it) => {
+        const key = it.product_id;
+        const prev = map.get(key) || { name: it.products?.name || "-", qty: 0, revenue: 0, profit: 0 };
+        prev.qty += Number(it.qty);
+        prev.revenue += Number(it.subtotal);
+        prev.profit += Number(it.subtotal) - Number(it.cost_price_snapshot) * Number(it.qty);
+        map.set(key, prev);
+      });
+      const topProducts = Array.from(map.values()).sort((a, b) => b.qty - a.qty).slice(0, 8);
+
+      const revenue = (txs || []).reduce((s, t) => s + Number(t.total), 0);
+      const profit = Array.from(map.values()).reduce((s, p) => s + p.profit, 0);
+
+      setHistoryResult({ transactions: txs || [], topProducts, revenue, profit, count: (txs || []).length });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function handleExportHistory() {
+    if (!historyResult) return;
+    const rows = historyResult.transactions.map((t) => ({
+      Tanggal: formatDateTime(t.created_at),
+      Kasir: t.profiles?.full_name || "-",
+      Pelanggan: t.customers?.name || "Umum",
+      Subtotal: t.subtotal,
+      Diskon: t.discount,
+      BiayaAntar: t.delivery_fee,
+      Total: t.total,
+      Metode: t.payment_method,
+      Status: t.status,
+    }));
+    exportToCsv(`riwayat-${historyStart}_${historyEnd}.csv`, rows);
+  }
+
   const todayRevenue = todayTx.reduce((s, t) => s + Number(t.total), 0);
   const monthRevenue = monthTx.reduce((s, t) => s + Number(t.total), 0);
   const monthProfit = topProducts.reduce((s, p) => s + p.profit, 0);
@@ -191,6 +258,61 @@ export default function DashboardPage() {
         <StatCard label="Estimasi Laba Bulan Ini" value={formatRupiah(monthProfit)} tone="primary" />
         <StatCard label="Stok Menipis" value={lowStock.length} tone={lowStock.length > 0 ? "danger" : "default"} hint="Perlu perhatian" />
       </div>
+
+      <Card title="Cek History">
+        <p className="text-xs text-ink-muted mb-3">Pilih rentang tanggal untuk melihat rangkuman penjualan di luar &quot;Hari Ini&quot;/&quot;Bulan Ini&quot; di atas. Contoh: 01/09/2026 - 14/09/2026.</p>
+        <div className="flex flex-wrap items-end gap-3">
+          <Input label="Tanggal Mulai" type="date" value={historyStart} onChange={(e) => setHistoryStart(e.target.value)} />
+          <Input label="Tanggal Akhir" type="date" value={historyEnd} onChange={(e) => setHistoryEnd(e.target.value)} />
+          <Button onClick={loadHistory} disabled={historyLoading}>{historyLoading ? "Memuat..." : "Tampilkan"}</Button>
+          {historyResult && (
+            <Button variant="outline" onClick={handleExportHistory}>Ekspor Rentang Ini (CSV)</Button>
+          )}
+        </div>
+
+        {historyResult && (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <StatCard label="Total Omset" value={formatRupiah(historyResult.revenue)} hint={`${historyResult.count} transaksi`} tone="primary" />
+              <StatCard label="Estimasi Laba" value={formatRupiah(historyResult.profit)} tone="primary" />
+              <StatCard label="Jumlah Transaksi" value={historyResult.count} />
+            </div>
+
+            {historyResult.topProducts.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-2">Produk Terlaris di Rentang Ini</p>
+                <div className="space-y-1.5">
+                  {historyResult.topProducts.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
+                      <p>{p.name} <span className="text-xs text-ink-muted">({formatNumber(p.qty, 2)} terjual)</span></p>
+                      <p className="font-medium">{formatRupiah(p.revenue)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <p className="text-sm font-medium mb-2">Daftar Transaksi</p>
+              {historyResult.transactions.length === 0 ? (
+                <EmptyState text="Tidak ada transaksi di rentang tanggal ini." />
+              ) : (
+                <div className="max-h-72 overflow-auto space-y-1.5">
+                  {historyResult.transactions.map((tx) => (
+                    <div key={tx.id} className="flex items-center justify-between text-sm py-1.5 border-b border-border last:border-0">
+                      <div>
+                        <p className="font-medium">{formatRupiah(tx.total)}</p>
+                        <p className="text-xs text-ink-muted">{tx.profiles?.full_name} · {tx.customers?.name || "Umum"} · {formatDateTime(tx.created_at)}</p>
+                      </div>
+                      <span className="text-xs text-ink-muted capitalize">{tx.payment_method}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
 
       <Card title="Tren Penjualan 7 Hari Terakhir">
         <div className="h-56">
@@ -274,35 +396,39 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {pendingReturns.length > 0 && (
-        <Card title="Barang Retur ke Supplier (Belum Diambil)">
-          <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs text-ink-muted border-b border-border">
-                <tr>
-                  <th className="text-left py-2 pr-3 font-medium">Barang</th>
-                  <th className="text-left py-2 pr-3 font-medium">Supplier</th>
-                  <th className="text-right py-2 pr-3 font-medium">Jumlah</th>
-                  <th className="text-left py-2 pr-3 font-medium">Alasan</th>
-                  <th className="text-left py-2 font-medium">Tanggal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingReturns.map((r) => (
-                  <tr key={r.id} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-3">{r.products?.name}</td>
-                    <td className="py-2 pr-3">{r.suppliers?.name || "-"}</td>
-                    <td className="py-2 pr-3 text-right">{formatNumber(r.qty, 2)}</td>
-                    <td className="py-2 pr-3 text-ink-muted">{r.reason || "-"}</td>
-                    <td className="py-2 text-ink-muted">{formatDateTime(r.created_at)}</td>
+      <Card title="Barang Retur ke Supplier (Belum Diambil)">
+        {pendingReturns.length === 0 ? (
+          <EmptyState text="Tidak ada barang retur yang menunggu diambil." />
+        ) : (
+          <>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-ink-muted border-b border-border">
+                  <tr>
+                    <th className="text-left py-2 pr-3 font-medium">Barang</th>
+                    <th className="text-left py-2 pr-3 font-medium">Supplier</th>
+                    <th className="text-right py-2 pr-3 font-medium">Jumlah</th>
+                    <th className="text-left py-2 pr-3 font-medium">Alasan</th>
+                    <th className="text-left py-2 font-medium">Tanggal</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs text-ink-muted mt-3">Tandai sebagai "Sudah Diambil" di halaman Retur Barang setelah supplier mengambilnya.</p>
-        </Card>
-      )}
+                </thead>
+                <tbody>
+                  {pendingReturns.map((r) => (
+                    <tr key={r.id} className="border-b border-border last:border-0">
+                      <td className="py-2 pr-3">{r.products?.name}</td>
+                      <td className="py-2 pr-3">{r.suppliers?.name || "-"}</td>
+                      <td className="py-2 pr-3 text-right">{formatNumber(r.qty, 2)}</td>
+                      <td className="py-2 pr-3 text-ink-muted">{r.reason || "-"}</td>
+                      <td className="py-2 text-ink-muted">{formatDateTime(r.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-ink-muted mt-3">Tandai sebagai &quot;Sudah Diambil&quot; di halaman Retur Barang setelah supplier mengambilnya.</p>
+          </>
+        )}
+      </Card>
 
       <Card title="Hutang ke Supplier">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">

@@ -58,6 +58,12 @@ export default function ReturPage() {
     load();
   }
 
+  async function markNotPickedUp(r) {
+    await supabase.from("returns").update({ pickup_status: "belum_diambil", picked_up_at: null }).eq("id", r.id);
+    toast.success("Ditandai belum diambil, pindah ke daftar menunggu");
+    load();
+  }
+
   async function submit() {
     if (!form.product_id || !form.qty) return toast.error("Pilih barang dan isi jumlah");
     setSaving(true);
@@ -174,9 +180,14 @@ export default function ReturPage() {
                   <p className="font-medium">{r.products?.name} <Badge tone={r.return_type === "customer" ? "primary" : "warning"} className="ml-1">{r.return_type === "customer" ? "Dari Pelanggan" : "Ke Supplier"}</Badge></p>
                   <p className="text-xs text-ink-muted">{formatDateTime(r.created_at)} {r.reason ? `· ${r.reason}` : ""}</p>
                 </div>
-                <div className="text-right text-xs text-ink-muted">
-                  <p>{formatNumber(r.qty, 2)} unit</p>
-                  {r.refund_amount > 0 && <p>{formatRupiah(r.refund_amount)}</p>}
+                <div className="flex items-center gap-3">
+                  <div className="text-right text-xs text-ink-muted">
+                    <p>{formatNumber(r.qty, 2)} unit</p>
+                    {r.refund_amount > 0 && <p>{formatRupiah(r.refund_amount)}</p>}
+                  </div>
+                  {r.return_type === "supplier" && (
+                    <Button variant="outline" onClick={() => markNotPickedUp(r)}>Tandai Belum Diambil</Button>
+                  )}
                 </div>
               </div>
             ))}
