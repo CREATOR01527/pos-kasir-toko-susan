@@ -56,23 +56,32 @@ export default function PembelianPage() {
   const [payMethod, setPayMethod] = useState("cash");
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({ supplier_id: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
+  const [form, setForm] = useState({ supplier_id: "", nota_number: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
   const [items, setItems] = useState([]);
   const [draftProductId, setDraftProductId] = useState("");
   const [draftTiers, setDraftTiers] = useState({}); // { [price_type]: { qty, newCost, newSell } }
+
+  // Koreksi / Rusak: kurangi stok barang yang sudah diterima (rusak, susut, salah hitung).
+  const [corrModalOpen, setCorrModalOpen] = useState(false);
+  const [corrSaving, setCorrSaving] = useState(false);
+  const [corrForm, setCorrForm] = useState({ product_id: "", qty: "", reason: "", linkSupplierReturn: false, supplier_id: "" });
 
   useEffect(() => {
     load();
   }, []);
 
   useBarcodeScan((code) => {
-    if (!modalOpen) return;
+    if (!modalOpen && !corrModalOpen) return;
     const match = products.find(
       (p) => p.sku === code || (p.product_barcodes || []).some((b) => b.barcode === code)
     );
     if (!match) return toast.error(`Barcode "${code}" tidak ditemukan`, { id: "scan-pembelian" });
-    setDraftProductId(match.id);
-    setDraftTiers({});
+    if (corrModalOpen) {
+      setCorrForm((f) => ({ ...f, product_id: match.id }));
+    } else {
+      setDraftProductId(match.id);
+      setDraftTiers({});
+    }
     toast.success(`Terpilih: ${match.name}`, { id: "scan-pembelian" });
   });
 
@@ -150,6 +159,7 @@ export default function PembelianPage() {
         .from("purchase_orders")
         .insert({
           supplier_id: form.supplier_id,
+          nota_number: form.nota_number || null,
           due_date: form.due_date || null,
           notes: form.notes || null,
           subtotal,
@@ -193,7 +203,7 @@ export default function PembelianPage() {
 
       toast.success("Pesanan pembelian dibuat");
       setModalOpen(false);
-      setForm({ supplier_id: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
+      setForm({ supplier_id: "", nota_number: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
       setItems([]);
       load();
     } catch (err) {
@@ -313,14 +323,69 @@ export default function PembelianPage() {
     }
   }
 
+  // Koreksi / Rusak: kurangi stok barang yang sudah diterima (barang rusak,
+  // susut, atau salah hitung saat penerimaan). Bisa sekalian ditandai untuk
+  // diretur ke supplier -- kalau ditandai, langsung muncul di daftar retur
+  // supplier yang belum diambil (halaman Retur Barang & Dashboard).
+  async function submitCorrection() {
+    if (!corrForm.product_id || !corrForm.qty) return toast.error("Pilih barang dan isi jumlah dikurangi");
+    const product = products.find((p) => p.id === corrForm.product_id);
+    const qty = Number(corrForm.qty);
+    if (qty > Number(product.stock_qty)) {
+      return toast.error(`Jumlah koreksi (${qty}) melebihi stok yang ada (${product.stock_qty}). Periksa kembali.`);
+    }
+    if (corrForm.linkSupplierReturn && !corrForm.supplier_id) {
+      return toast.error("Pilih supplier untuk retur");
+    }
+    setCorrSaving(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const newStock = Number(product.stock_qty) - qty;
+
+      await supabase.from("products").update({ stock_qty: newStock }).eq("id", corrForm.product_id);
+      await supabase.from("stock_movements").insert({
+        product_id: corrForm.product_id,
+        movement_type: "koreksi",
+        qty: -qty,
+        note: corrForm.reason || null,
+        created_by: userData?.user?.id,
+      });
+
+      if (corrForm.linkSupplierReturn && corrForm.supplier_id) {
+        await supabase.from("returns").insert({
+          return_type: "supplier",
+          product_id: corrForm.product_id,
+          qty,
+          reason: corrForm.reason || null,
+          reference_supplier_id: corrForm.supplier_id,
+          pickup_status: "belum_diambil",
+          created_by: userData?.user?.id,
+        });
+      }
+
+      await logActivity(supabase, { userId: userData?.user?.id, action: "stock_correction", entity: "products", entityId: corrForm.product_id, details: { qty } });
+      toast.success(corrForm.linkSupplierReturn ? "Koreksi dicatat & masuk daftar retur supplier" : "Koreksi stok dicatat");
+      setCorrForm({ product_id: "", qty: "", reason: "", linkSupplierReturn: false, supplier_id: "" });
+      setCorrModalOpen(false);
+      load();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setCorrSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Pembelian</h1>
-          <p className="text-sm text-ink-muted">Buat pesanan ke supplier, terima barang masuk, dan pantau sisa hutang tiap nota pembelian.</p>
+          <h1 className="text-xl font-semibold">Stok & Barang Masuk</h1>
+          <p className="text-sm text-ink-muted">Buat pesanan ke supplier, terima barang masuk, koreksi barang rusak, dan pantau sisa hutang tiap nota.</p>
         </div>
-        <Button onClick={() => setModalOpen(true)}>+ Pesanan Baru</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setCorrModalOpen(true)}>Koreksi / Rusak</Button>
+          <Button onClick={() => setModalOpen(true)}>Terima Barang</Button>
+        </div>
       </div>
 
       <Card>
@@ -332,7 +397,10 @@ export default function PembelianPage() {
               <div key={o.id} className="border border-border rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <p className="text-sm font-medium">{o.suppliers?.name}</p>
+                    <p className="text-sm font-medium">
+                      {o.suppliers?.name}
+                      {o.nota_number && <span className="text-ink-muted font-normal"> · Nota {o.nota_number}</span>}
+                    </p>
                     <p className="text-xs text-ink-muted">{formatDateTime(o.created_at)} {o.due_date ? `· Jatuh tempo ${formatDate(o.due_date)}` : ""}</p>
                   </div>
                   <div className="flex gap-1.5">
@@ -377,6 +445,9 @@ export default function PembelianPage() {
               <option value="">-- pilih --</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </Select>
+            <Input label="Nomor Nota" placeholder="contoh: 0021" value={form.nota_number} onChange={(e) => setForm({ ...form, nota_number: e.target.value })} />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3 mb-3">
             <Input label="Jatuh Tempo" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} />
           </div>
           <Textarea label="Catatan" placeholder="Kirim minggu depan, faktur menyusul" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="mb-4" />
@@ -521,6 +592,47 @@ export default function PembelianPage() {
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setPayOrder(null)}>Batal</Button>
             <Button onClick={submitSupplierPayment} disabled={saving}>{saving ? "Menyimpan..." : "Simpan Pembayaran"}</Button>
+          </div>
+        </Modal>
+      )}
+
+      {corrModalOpen && (
+        <Modal title="Koreksi / Barang Rusak" onClose={() => setCorrModalOpen(false)}>
+          <p className="text-xs text-ink-muted mb-3">Pakai mode ini untuk mengurangi stok barang yang sudah diterima karena rusak, susut, atau salah hitung.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Select label="Pilih Barang (bisa scan barcode)" value={corrForm.product_id} onChange={(e) => setCorrForm({ ...corrForm, product_id: e.target.value })}>
+              <option value="">-- pilih --</option>
+              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </Select>
+            <Input label="Jumlah Dikurangi" type="number" placeholder="contoh: 5" value={corrForm.qty} onChange={(e) => setCorrForm({ ...corrForm, qty: e.target.value })} />
+          </div>
+          <Textarea label="Alasan Kerusakan" placeholder="Barang rusak / telur pecah / susut" value={corrForm.reason} onChange={(e) => setCorrForm({ ...corrForm, reason: e.target.value })} className="mt-3" rows={2} />
+
+          <div className="mt-3 border border-border rounded-lg p-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={corrForm.linkSupplierReturn}
+                onChange={(e) => setCorrForm({ ...corrForm, linkSupplierReturn: e.target.checked })}
+              />
+              Barang ini mau diretur ke supplier (masuk daftar retur, belum langsung diambil)
+            </label>
+            {corrForm.linkSupplierReturn && (
+              <Select
+                label="Supplier"
+                value={corrForm.supplier_id}
+                onChange={(e) => setCorrForm({ ...corrForm, supplier_id: e.target.value })}
+                className="mt-2"
+              >
+                <option value="">-- pilih supplier --</option>
+                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setCorrModalOpen(false)}>Batal</Button>
+            <Button variant="danger" onClick={submitCorrection} disabled={corrSaving}>{corrSaving ? "Menyimpan..." : "Simpan Koreksi"}</Button>
           </div>
         </Modal>
       )}
