@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatRupiah, formatNumber } from "@/lib/format";
 import { Button, Card, Input, Modal, Toggle, EmptyState, Badge } from "@/components/ui/kit";
 import { useBarcodeScan } from "@/lib/useBarcodeScan";
+import { findBarcodeConflict } from "@/lib/checkBarcodeOwner";
 
 const emptyForm = {
   id: null,
@@ -130,6 +131,13 @@ export default function ProdukPage() {
     }
     if (isKg && form.price_per_kg && form.cost_per_kg && Number(form.price_per_kg) < Number(form.cost_per_kg)) {
       return toast.error("Harga jual per Kg tidak boleh lebih rendah dari harga beli per Kg (akan rugi)");
+    }
+
+    if (form.sku) {
+      const conflict = await findBarcodeConflict(supabase, form.sku, { excludeProductId: form.id });
+      if (conflict) {
+        return toast.error(`Barcode "${form.sku}" sudah dipakai oleh produk "${conflict.name}". Satu barcode hanya untuk satu produk.`);
+      }
     }
 
     setSaving(true);

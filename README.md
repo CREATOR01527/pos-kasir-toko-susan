@@ -51,7 +51,7 @@ Dua peran: **Admin** (akses penuh) dan **Kasir** (hanya halaman kasir).
 
 1. Buat project baru di https://supabase.com.
 2. Buka **SQL Editor**, jalankan seluruh isi file `supabase/schema.sql` (satu kali).
-3. Jalankan juga `supabase/migration-02-fitur-tambahan.sql`, lalu `supabase/migration-03-perbaikan.sql`, lalu `supabase/migration-04-harga-bertingkat.sql`, lalu `supabase/migration-05-retur-dan-metode-bayar.sql` (satu kali, berurutan).
+3. Jalankan juga `supabase/migration-02-fitur-tambahan.sql`, lalu `supabase/migration-03-perbaikan.sql`, lalu `supabase/migration-04-harga-bertingkat.sql`, lalu `supabase/migration-05-retur-dan-metode-bayar.sql`, `supabase/migration-06-barcode-unik-dan-nota.sql`, lalu `supabase/migration-07-catatan-item-pembelian.sql` (satu kali, berurutan).
 3. Buka **Authentication > Users > Add user**, buat akun admin pertama:
    - Email: `namaadmin@kasir.local` (format ini dipakai karena aplikasi login
      dengan **username**, bukan email — sistem menambahkan `@kasir.local` otomatis)

@@ -56,10 +56,16 @@ export default function PembelianPage() {
   const [payMethod, setPayMethod] = useState("cash");
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({ supplier_id: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
+  const [form, setForm] = useState({ supplier_id: "", nota_number: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
   const [items, setItems] = useState([]);
   const [draftProductId, setDraftProductId] = useState("");
   const [draftTiers, setDraftTiers] = useState({}); // { [price_type]: { qty, newCost, newSell } }
+
+  // Koreksi / Rusak: kurangi jumlah barang yang SUDAH ditambahkan di daftar
+  // "Barang Dipesan" karena ada yang rusak saat diterima -- bukan pilih barang
+  // baru, tapi pilih dari barang yang sudah ada di daftar nota ini.
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [correctionForm, setCorrectionForm] = useState({ itemIndex: "", qty: "", reason: "", linkSupplierReturn: false });
 
   useEffect(() => {
     load();
@@ -126,6 +132,7 @@ export default function PembelianPage() {
         old_cost: Number(tier.oldCost || 0),
         new_sell_price: newSell,
         old_sell_price: Number(tier.oldSell || 0),
+        note: null,
       });
     }
     if (rowsToAdd.length === 0) return toast.error("Isi jumlah diterima di minimal satu tingkatan harga");
@@ -150,6 +157,7 @@ export default function PembelianPage() {
         .from("purchase_orders")
         .insert({
           supplier_id: form.supplier_id,
+          nota_number: form.nota_number || null,
           due_date: form.due_date || null,
           notes: form.notes || null,
           subtotal,
@@ -171,6 +179,7 @@ export default function PembelianPage() {
         unit_cost: i.unit_cost,
         new_sell_price: i.new_sell_price,
         subtotal: i.qty * i.unit_cost,
+        note: i.note || null,
       }));
       await supabase.from("purchase_order_items").insert(rows);
 
@@ -193,8 +202,10 @@ export default function PembelianPage() {
 
       toast.success("Pesanan pembelian dibuat");
       setModalOpen(false);
-      setForm({ supplier_id: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
+      setForm({ supplier_id: "", nota_number: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
       setItems([]);
+      setCorrectionOpen(false);
+      setCorrectionForm({ itemIndex: "", qty: "", reason: "", linkSupplierReturn: false });
       load();
     } catch (err) {
       toast.error(err.message);
@@ -313,14 +324,73 @@ export default function PembelianPage() {
     }
   }
 
+  // Koreksi / Rusak: kurangi jumlah salah satu baris di "Barang Dipesan" (belum
+  // tersimpan ke database) karena ada yang rusak saat diterima. Kalau jumlah
+  // dikurangi sampai habis, baris itu dihapus dari daftar. Bisa juga ditandai
+  // untuk diretur ke supplier nota ini (masuk daftar retur, belum diambil).
+  async function applyCorrection() {
+    const idx = correctionForm.itemIndex;
+    if (idx === "" || idx === null) return toast.error("Pilih barang yang rusak dari daftar Barang Dipesan");
+    const item = items[Number(idx)];
+    if (!item) return toast.error("Barang tidak ditemukan di daftar");
+    const qty = Number(correctionForm.qty);
+    if (!qty || qty <= 0) return toast.error("Isi jumlah yang rusak/dikurangi");
+    if (qty > Number(item.qty)) {
+      return toast.error(`Jumlah koreksi (${qty}) melebihi jumlah di daftar (${item.qty}). Periksa kembali.`);
+    }
+    if (correctionForm.linkSupplierReturn && !form.supplier_id) {
+      return toast.error("Pilih supplier pada form pesanan dahulu");
+    }
+
+    const newQty = Number(item.qty) - qty;
+    setItems((prev) => {
+      const next = [...prev];
+      if (newQty <= 0) {
+        next.splice(Number(idx), 1);
+      } else {
+        next[Number(idx)] = {
+          ...next[Number(idx)],
+          qty: newQty,
+          note: [next[Number(idx)].note, `Dikurangi ${qty} (rusak${correctionForm.reason ? `: ${correctionForm.reason}` : ""})`]
+            .filter(Boolean)
+            .join("; "),
+        };
+      }
+      return next;
+    });
+
+    if (correctionForm.linkSupplierReturn && form.supplier_id) {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        await supabase.from("returns").insert({
+          return_type: "supplier",
+          product_id: item.product_id,
+          qty,
+          reason: correctionForm.reason || null,
+          reference_supplier_id: form.supplier_id,
+          pickup_status: "belum_diambil",
+          created_by: userData?.user?.id,
+        });
+        toast.success("Koreksi diterapkan & masuk daftar retur supplier");
+      } catch (err) {
+        toast.error("Koreksi diterapkan, tapi gagal mencatat ke daftar retur: " + err.message);
+      }
+    } else {
+      toast.success("Koreksi diterapkan ke daftar Barang Dipesan");
+    }
+
+    setCorrectionForm({ itemIndex: "", qty: "", reason: "", linkSupplierReturn: false });
+    setCorrectionOpen(false);
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Pembelian</h1>
-          <p className="text-sm text-ink-muted">Buat pesanan ke supplier, terima barang masuk, dan pantau sisa hutang tiap nota pembelian.</p>
+          <h1 className="text-xl font-semibold">Stok & Barang Masuk</h1>
+          <p className="text-sm text-ink-muted">Buat pesanan ke supplier, terima barang masuk, dan pantau sisa hutang tiap nota.</p>
         </div>
-        <Button onClick={() => setModalOpen(true)}>+ Pesanan Baru</Button>
+        <Button onClick={() => setModalOpen(true)}>Terima Barang</Button>
       </div>
 
       <Card>
@@ -332,7 +402,10 @@ export default function PembelianPage() {
               <div key={o.id} className="border border-border rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <p className="text-sm font-medium">{o.suppliers?.name}</p>
+                    <p className="text-sm font-medium">
+                      {o.suppliers?.name}
+                      {o.nota_number && <span className="text-ink-muted font-normal"> · Nota {o.nota_number}</span>}
+                    </p>
                     <p className="text-xs text-ink-muted">{formatDateTime(o.created_at)} {o.due_date ? `· Jatuh tempo ${formatDate(o.due_date)}` : ""}</p>
                   </div>
                   <div className="flex gap-1.5">
@@ -368,7 +441,7 @@ export default function PembelianPage() {
       </Card>
 
       {modalOpen && (
-        <Modal title="Pesanan Pembelian Baru" onClose={() => setModalOpen(false)} wide>
+        <Modal title="Pesanan Pembelian Baru" onClose={() => { setModalOpen(false); setCorrectionOpen(false); }} wide>
           <p className="text-xs text-ink-muted mb-3">
             Stok baru bertambah setelah barang diterima, bukan saat pesanan dibuat.
           </p>
@@ -377,6 +450,9 @@ export default function PembelianPage() {
               <option value="">-- pilih --</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </Select>
+            <Input label="Nomor Nota" placeholder="contoh: 0021" value={form.nota_number} onChange={(e) => setForm({ ...form, nota_number: e.target.value })} />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3 mb-3">
             <Input label="Jatuh Tempo" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} />
           </div>
           <Textarea label="Catatan" placeholder="Kirim minggu depan, faktur menyusul" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="mb-4" />
@@ -455,18 +531,72 @@ export default function PembelianPage() {
             {items.length > 0 && (
               <div className="mt-4 space-y-1.5">
                 {items.map((it, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-sm border-t border-border pt-1.5">
-                    <span>
-                      {it.name} <span className="text-ink-muted text-xs">({it.price_type_label})</span> x{it.qty}
-                      {it.unit_cost !== it.old_cost && <span className="text-primary text-xs ml-1">harga beli baru</span>}
-                      {it.new_sell_price && <span className="text-primary text-xs ml-1">harga jual baru</span>}
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <span>{formatRupiah(it.qty * it.unit_cost)}</span>
-                      <button onClick={() => removeItem(idx)} className="text-xs text-danger">Hapus</button>
+                  <div key={idx} className="text-sm border-t border-border pt-1.5">
+                    <div className="flex items-center justify-between">
+                      <span>
+                        {it.name} <span className="text-ink-muted text-xs">({it.price_type_label})</span> x{it.qty}
+                        {it.unit_cost !== it.old_cost && <span className="text-primary text-xs ml-1">harga beli baru</span>}
+                        {it.new_sell_price && <span className="text-primary text-xs ml-1">harga jual baru</span>}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span>{formatRupiah(it.qty * it.unit_cost)}</span>
+                        <button onClick={() => removeItem(idx)} className="text-xs text-danger">Hapus</button>
+                      </div>
                     </div>
+                    {it.note && <p className="text-[11px] text-danger mt-0.5">{it.note}</p>}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {items.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-border">
+                {!correctionOpen ? (
+                  <Button variant="outline" onClick={() => setCorrectionOpen(true)}>Koreksi / Rusak</Button>
+                ) : (
+                  <div className="border border-border rounded-lg p-3 space-y-3">
+                    <p className="text-xs text-ink-muted">Kurangi jumlah salah satu barang di atas karena rusak saat diterima. Jumlah yang tersimpan di nota otomatis berkurang.</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select
+                        label="Barang yang Rusak"
+                        value={correctionForm.itemIndex}
+                        onChange={(e) => setCorrectionForm({ ...correctionForm, itemIndex: e.target.value })}
+                      >
+                        <option value="">-- pilih dari Barang Dipesan --</option>
+                        {items.map((it, idx) => (
+                          <option key={idx} value={idx}>{it.name} ({it.price_type_label}) - saat ini {it.qty}</option>
+                        ))}
+                      </Select>
+                      <Input
+                        label="Jumlah Rusak/Dikurangi"
+                        type="number"
+                        placeholder="contoh: 2"
+                        value={correctionForm.qty}
+                        onChange={(e) => setCorrectionForm({ ...correctionForm, qty: e.target.value })}
+                      />
+                    </div>
+                    <Textarea
+                      label="Alasan Kerusakan"
+                      placeholder="Dus penyok / botol pecah / susut"
+                      value={correctionForm.reason}
+                      onChange={(e) => setCorrectionForm({ ...correctionForm, reason: e.target.value })}
+                      rows={2}
+                    />
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={correctionForm.linkSupplierReturn}
+                        onChange={(e) => setCorrectionForm({ ...correctionForm, linkSupplierReturn: e.target.checked })}
+                        disabled={!form.supplier_id}
+                      />
+                      Retur ke supplier ini (masuk daftar retur, belum diambil)
+                    </label>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => { setCorrectionOpen(false); setCorrectionForm({ itemIndex: "", qty: "", reason: "", linkSupplierReturn: false }); }}>Batal</Button>
+                      <Button variant="danger" onClick={applyCorrection}>Terapkan Koreksi</Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -488,7 +618,7 @@ export default function PembelianPage() {
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setModalOpen(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => { setModalOpen(false); setCorrectionOpen(false); }}>Batal</Button>
             <Button onClick={submitOrder} disabled={saving}>{saving ? "Menyimpan..." : "Buat Pesanan"}</Button>
           </div>
         </Modal>
