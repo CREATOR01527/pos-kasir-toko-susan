@@ -56,7 +56,7 @@ export default function PembelianPage() {
   const [payMethod, setPayMethod] = useState("cash");
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({ supplier_id: "", due_date: "", notes: "", discount: "0", down_payment: "0" });
+  const [form, setForm] = useState({ supplier_id: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
   const [items, setItems] = useState([]);
   const [draftProductId, setDraftProductId] = useState("");
   const [draftTiers, setDraftTiers] = useState({}); // { [price_type]: { qty, newCost, newSell } }
@@ -173,11 +173,27 @@ export default function PembelianPage() {
         subtotal: i.qty * i.unit_cost,
       }));
       await supabase.from("purchase_order_items").insert(rows);
+
+      // Uang muka (kalau diisi) langsung dicatat sebagai pembayaran ke supplier,
+      // supaya ikut terhitung di Dashboard "Sudah Dibayar (Transfer)"/"Sudah Dibayar (Cash)".
+      const downPayment = Number(form.down_payment) || 0;
+      if (downPayment > 0) {
+        await supabase.from("supplier_payments").insert({
+          purchase_order_id: order.id,
+          amount: downPayment,
+          method: form.down_payment_method,
+          paid_by: userData?.user?.id,
+        });
+        if (remaining <= 0) {
+          await supabase.from("purchase_orders").update({ payoff_method: form.down_payment_method }).eq("id", order.id);
+        }
+      }
+
       await logActivity(supabase, { userId: userData?.user?.id, action: "create_purchase_order", entity: "purchase_orders", entityId: order.id });
 
       toast.success("Pesanan pembelian dibuat");
       setModalOpen(false);
-      setForm({ supplier_id: "", due_date: "", notes: "", discount: "0", down_payment: "0" });
+      setForm({ supplier_id: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
       setItems([]);
       load();
     } catch (err) {
@@ -455,9 +471,13 @@ export default function PembelianPage() {
             )}
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-3 mb-4">
+          <div className="grid sm:grid-cols-3 gap-3 mb-4">
             <Input label="Diskon" type="number" value={form.discount} onChange={(e) => setForm({ ...form, discount: e.target.value })} />
             <Input label="Bayar Sekarang (Uang Muka)" type="number" value={form.down_payment} onChange={(e) => setForm({ ...form, down_payment: e.target.value })} />
+            <Select label="Dibayar Cash / Transfer" value={form.down_payment_method} onChange={(e) => setForm({ ...form, down_payment_method: e.target.value })}>
+              <option value="cash">Cash</option>
+              <option value="transfer">Transfer</option>
+            </Select>
           </div>
 
           <div className="bg-background rounded-xl p-4 space-y-1 text-sm mb-4">

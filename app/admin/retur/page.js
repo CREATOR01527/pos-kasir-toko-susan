@@ -35,15 +35,27 @@ export default function ReturPage() {
 
   async function load() {
     setLoading(true);
+
+    // Bersihkan permanen riwayat retur yang sudah diambil lebih dari 1 bulan lalu.
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    await supabase.from("returns").delete().eq("pickup_status", "sudah_diambil").lt("picked_up_at", oneMonthAgo.toISOString());
+
     const [{ data: p }, { data: s }, { data: r }] = await Promise.all([
       supabase.from("products").select("id, name, stock_qty, sell_price, sku, product_barcodes(barcode)").eq("active", true).order("name"),
       supabase.from("suppliers").select("id, name").eq("active", true).order("name"),
-      supabase.from("returns").select("*, products(name)").order("created_at", { ascending: false }).limit(50),
+      supabase.from("returns").select("*, products(name), suppliers:reference_supplier_id(name)").order("created_at", { ascending: false }).limit(100),
     ]);
     setProducts(p || []);
     setSuppliers(s || []);
     setReturns(r || []);
     setLoading(false);
+  }
+
+  async function markPickedUp(r) {
+    await supabase.from("returns").update({ pickup_status: "sudah_diambil", picked_up_at: new Date().toISOString() }).eq("id", r.id);
+    toast.success("Ditandai sudah diambil, pindah ke riwayat");
+    load();
   }
 
   async function submit() {
@@ -61,6 +73,9 @@ export default function ReturPage() {
         reason: form.reason || null,
         refund_amount: Number(form.refund_amount) || 0,
         reference_supplier_id: tab === "supplier" ? form.supplier_id || null : null,
+        // Retur pelanggan langsung selesai; retur ke supplier menunggu diambil dulu.
+        pickup_status: tab === "customer" ? "sudah_diambil" : "belum_diambil",
+        picked_up_at: tab === "customer" ? new Date().toISOString() : null,
         created_by: userData?.user?.id,
       });
 
@@ -85,6 +100,9 @@ export default function ReturPage() {
       setSaving(false);
     }
   }
+
+  const pendingSupplierReturns = returns.filter((r) => r.return_type === "supplier" && r.pickup_status === "belum_diambil");
+  const historyReturns = returns.filter((r) => r.pickup_status === "sudah_diambil");
 
   return (
     <div className="space-y-5">
@@ -121,12 +139,36 @@ export default function ReturPage() {
         </div>
       </Card>
 
+      <Card title="List Barang Retur (Belum Diambil Supplier)">
+        {loading ? <p className="text-sm text-ink-muted">Memuat...</p> : pendingSupplierReturns.length === 0 ? (
+          <EmptyState text="Tidak ada barang retur yang menunggu diambil." />
+        ) : (
+          <div className="space-y-2">
+            {pendingSupplierReturns.map((r) => (
+              <div key={r.id} className="flex items-center justify-between text-sm py-1.5 border-b border-border last:border-0">
+                <div>
+                  <p className="font-medium">{r.products?.name} <Badge tone="warning" className="ml-1">Belum Diambil</Badge></p>
+                  <p className="text-xs text-ink-muted">
+                    {r.suppliers?.name ? `${r.suppliers.name} · ` : ""}{formatDateTime(r.created_at)} {r.reason ? `· ${r.reason}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-ink-muted">{formatNumber(r.qty, 2)} unit</span>
+                  <Button variant="outline" onClick={() => markPickedUp(r)}>Sudah Diambil</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <Card title="Riwayat Retur">
-        {loading ? <p className="text-sm text-ink-muted">Memuat...</p> : returns.length === 0 ? (
+        <p className="text-xs text-ink-muted mb-3">Retur yang sudah diambil/selesai. Data otomatis dihapus permanen 1 bulan setelah tanggal diambil.</p>
+        {loading ? <p className="text-sm text-ink-muted">Memuat...</p> : historyReturns.length === 0 ? (
           <EmptyState text="Belum ada retur." />
         ) : (
           <div className="space-y-2">
-            {returns.map((r) => (
+            {historyReturns.map((r) => (
               <div key={r.id} className="flex items-center justify-between text-sm py-1.5 border-b border-border last:border-0">
                 <div>
                   <p className="font-medium">{r.products?.name} <Badge tone={r.return_type === "customer" ? "primary" : "warning"} className="ml-1">{r.return_type === "customer" ? "Dari Pelanggan" : "Ke Supplier"}</Badge></p>
