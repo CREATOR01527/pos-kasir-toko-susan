@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #14171f;
+  --ink-muted: #5b6472;
+  --border: #e4e7ec;
+  --primary: #0f6d4f;
+  --primary-hover: #0b5a40;
+  --primary-soft: #e6f3ee;
+  --danger: #b3431f;
+  --danger-soft: #fbeae4;
+  --warning: #a4750d;
+  --warning-soft: #fdf3df;
+}
+
+.dark {
+  --background: #0e1116;
+  --surface: #171b22;
+  --ink: #edf0f4;
+  --ink-muted: #98a2b3;
+  --border: #2a2f3a;
+  --primary: #22a67a;
+  --primary-hover: #1c8a66;
+  --primary-soft: #123326;
+  --danger: #e0684a;
+  --danger-soft: #38201a;
+  --warning: #e0ab3f;
+  --warning-soft: #3a2e12;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-muted);
+}
