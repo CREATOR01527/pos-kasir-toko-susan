@@ -147,7 +147,7 @@ export default function ProdukPage() {
     try {
       const payload = {
         name: form.name,
-        sku: form.sku || null,
+        sku: form.sku.trim() || null,
         unit_type: form.unit_type,
         cost_price: isKg ? Number(form.cost_per_kg) || 0 : Number(form.cost_price) || 0,
         sell_price: isKg ? Number(form.price_per_kg) || 0 : Number(form.sell_price) || 0,

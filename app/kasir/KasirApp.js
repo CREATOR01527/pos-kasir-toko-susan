@@ -13,6 +13,7 @@ import { useScanner, BARCODE_EVENT } from "@/components/ScannerProvider";
 import ScannerStatusWidget from "@/components/ScannerStatusWidget";
 import { useViewport } from "@/lib/useViewport";
 import { speakProductName, isVoiceEnabled, setVoiceEnabled } from "@/lib/voice";
+import { normalizeBarcode, findProductByCode } from "@/lib/barcode";
 
 import OpeningCashModal from "./components/OpeningCashModal";
 import CloseShiftModal from "./components/CloseShiftModal";
@@ -135,13 +136,16 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
   }
 
   async function handleBarcodeInput(code) {
+    const cleanCode = normalizeBarcode(code);
+    if (!cleanCode) return;
+
     // Cek dulu di data yang sudah dimuat (cepat, tanpa jaringan)
-    let product = products.find(
-      (p) => p.sku === code || (p.product_barcodes || []).some((b) => b.barcode === code)
-    );
+    let product = findProductByCode(products, cleanCode);
 
     // Kalau tidak ketemu (mis. barang baru ditambahkan admin setelah kasir login),
     // cek langsung ke database supaya tidak kelewat karena data di layar sudah usang.
+    // Pakai ilike (tanpa peduli besar/kecil huruf) supaya konsisten dengan cara
+    // barcode dicocokkan di atas.
     if (!product) {
       const { data } = await supabase
         .from("products")
@@ -149,10 +153,8 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
           "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes(*)"
         )
         .eq("active", true)
-        .eq("sku", code);
-      const fresh = (data || []).find(
-        (p) => p.sku === code || (p.product_barcodes || []).some((b) => b.barcode === code)
-      );
+        .ilike("sku", cleanCode);
+      const fresh = findProductByCode(data || [], cleanCode);
       if (fresh) {
         product = fresh;
         products.push(fresh); // simpan supaya scan berikutnya untuk barang sama tidak perlu query lagi
@@ -164,11 +166,11 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes!inner(*)"
           )
           .eq("active", true)
-          .eq("product_barcodes.barcode", code)
-          .maybeSingle();
-        if (viaBarcode) {
-          product = viaBarcode;
-          products.push(viaBarcode);
+          .ilike("product_barcodes.barcode", cleanCode);
+        const matchedViaBarcode = (viaBarcode || [])[0];
+        if (matchedViaBarcode) {
+          product = matchedViaBarcode;
+          products.push(matchedViaBarcode);
         }
       }
     }

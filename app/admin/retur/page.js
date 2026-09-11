@@ -9,6 +9,7 @@ import { Button, Card, EmptyState, Input, Select, Textarea, Badge } from "@/comp
 import { useBarcodeScan } from "@/lib/useBarcodeScan";
 import { useViewport } from "@/lib/useViewport";
 import CameraScanButton from "@/components/CameraScanButton";
+import { findProductByCode } from "@/lib/barcode";
 
 export default function ReturPage() {
   const supabase = createClient();
@@ -22,9 +23,7 @@ export default function ReturPage() {
   const { isMobile } = useViewport();
 
   function pickByBarcode(code) {
-    const match = products.find(
-      (p) => p.sku === code || (p.product_barcodes || []).some((b) => b.barcode === code)
-    );
+    const match = findProductByCode(products, code);
     if (!match) return toast.error(`Barcode "${code}" tidak ditemukan`, { id: "scan-retur" });
     setForm((f) => ({ ...f, product_id: match.id }));
     toast.success(`Terpilih: ${match.name}`, { id: "scan-retur" });

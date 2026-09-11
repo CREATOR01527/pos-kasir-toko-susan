@@ -58,13 +58,15 @@ export default function LabelBarcodePage() {
 
   async function submitBarcode() {
     if (!form.product_id || !form.barcode) return toast.error("Pilih barang dan isi kode barcode");
+    const cleanBarcode = form.barcode.trim();
+    if (!cleanBarcode) return toast.error("Kode barcode tidak boleh kosong");
 
-    const conflict = await findBarcodeConflict(supabase, form.barcode, {
+    const conflict = await findBarcodeConflict(supabase, cleanBarcode, {
       excludeBarcodeId: form.editingId,
       excludeProductId: form.product_id,
     });
     if (conflict) {
-      return toast.error(`Barcode "${form.barcode}" sudah dipakai oleh produk "${conflict.name}". Satu barcode hanya untuk satu produk.`);
+      return toast.error(`Barcode "${cleanBarcode}" sudah dipakai oleh produk "${conflict.name}". Satu barcode hanya untuk satu produk.`);
     }
 
     setSaving(true);
@@ -72,13 +74,13 @@ export default function LabelBarcodePage() {
       if (form.editingId) {
         const { error } = await supabase
           .from("product_barcodes")
-          .update({ product_id: form.product_id, barcode: form.barcode, note: form.note || null })
+          .update({ product_id: form.product_id, barcode: cleanBarcode, note: form.note || null })
           .eq("id", form.editingId);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("product_barcodes").insert({
           product_id: form.product_id,
-          barcode: form.barcode,
+          barcode: cleanBarcode,
           note: form.note || null,
         });
         if (error) throw error;

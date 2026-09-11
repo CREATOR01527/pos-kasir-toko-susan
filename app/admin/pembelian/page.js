@@ -9,6 +9,7 @@ import { Button, Card, Input, Modal, Select, Textarea, EmptyState, Badge } from 
 import { useBarcodeScan } from "@/lib/useBarcodeScan";
 import { useViewport } from "@/lib/useViewport";
 import CameraScanButton from "@/components/CameraScanButton";
+import { findProductByCode } from "@/lib/barcode";
 
 // Susunan kolom tingkatan harga per tipe produk, lengkap dengan modal & harga jual
 // yang sudah ada di data produk (jadi tidak perlu diketik ulang, cukup lihat sebagai
@@ -74,15 +75,17 @@ export default function PembelianPage() {
     load();
   }, []);
 
-  useBarcodeScan((code) => {
-    if (!modalOpen) return;
-    const match = products.find(
-      (p) => p.sku === code || (p.product_barcodes || []).some((b) => b.barcode === code)
-    );
+  function pickProductByCode(code) {
+    const match = findProductByCode(products, code);
     if (!match) return toast.error(`Barcode "${code}" tidak ditemukan`, { id: "scan-pembelian" });
     setDraftProductId(match.id);
     setDraftTiers({});
     toast.success(`Terpilih: ${match.name}`, { id: "scan-pembelian" });
+  }
+
+  useBarcodeScan((code) => {
+    if (!modalOpen) return;
+    pickProductByCode(code);
   });
 
   async function load() {
@@ -475,15 +478,7 @@ export default function PembelianPage() {
               </Select>
               {isMobile && (
                 <CameraScanButton
-                  onDetected={(code) => {
-                    const match = products.find(
-                      (p) => p.sku === code || (p.product_barcodes || []).some((b) => b.barcode === code)
-                    );
-                    if (!match) return toast.error(`Barcode "${code}" tidak ditemukan`, { id: "scan-pembelian" });
-                    setDraftProductId(match.id);
-                    setDraftTiers({});
-                    toast.success(`Terpilih: ${match.name}`, { id: "scan-pembelian" });
-                  }}
+                  onDetected={pickProductByCode}
                   title="Cari barang pakai kamera"
                 />
               )}

@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { playScanBeep } from "@/lib/voice";
 
 // Menggunakan library html5-qrcode untuk memakai kamera HP/laptop sebagai
 // scanner barcode. Dimuat secara dinamis agar tidak membebani bundle awal.
 export default function CameraScannerModal({ onDetected, onClose }) {
   const containerId = "camera-scanner-region";
   const scannerRef = useRef(null);
+  const detectedRef = useRef(false); // cegah callback sukses terpanggil dobel sebelum kamera sempat berhenti
 
   useEffect(() => {
     let stopped = false;
@@ -21,7 +23,11 @@ export default function CameraScannerModal({ onDetected, onClose }) {
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 250, height: 150 } },
           (decodedText) => {
-            onDetected(decodedText);
+            if (detectedRef.current) return;
+            detectedRef.current = true;
+            playScanBeep(); // bunyi "tit" tanda scan berhasil
+            const code = (decodedText || "").trim();
+            onDetected(code);
           },
           () => {}
         )
