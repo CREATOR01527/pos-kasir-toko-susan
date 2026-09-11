@@ -1,8 +1,16 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { formatRupiah, formatDateTime } from "@/lib/format";
 
-export default function PendingListModal({ transactions, hotkeyLabel, onRecall, onClose }) {
+export default function PendingListModal({ transactions, hotkeyLabel, onRecall, onDelete, onClose }) {
+  function handleDelete(e, tx) {
+    e.stopPropagation();
+    if (confirm("Batalkan transaksi tertahan ini? Barang di dalamnya tidak akan kembali ke keranjang.")) {
+      onDelete?.(tx);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div
@@ -10,23 +18,35 @@ export default function PendingListModal({ transactions, hotkeyLabel, onRecall, 
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold mb-1">Transaksi Tertahan ({hotkeyLabel || "F8"})</h2>
-        <p className="text-xs text-ink-muted mb-4">Pilih transaksi untuk dipanggil kembali ke keranjang.</p>
+        <p className="text-xs text-ink-muted mb-4">Pilih transaksi untuk dipanggil kembali ke keranjang, atau batalkan dengan ikon tong sampah.</p>
         {transactions.length === 0 && (
           <p className="text-sm text-ink-muted text-center py-8">Tidak ada transaksi yang ditahan.</p>
         )}
         <div className="space-y-2">
           {transactions.map((tx) => (
-            <button
+            <div
               key={tx.id}
-              onClick={() => onRecall(tx)}
-              className="w-full text-left rounded-lg border border-border px-3 py-2.5 hover:border-primary hover:bg-primary-soft transition"
+              className="w-full flex items-stretch gap-2 rounded-lg border border-border hover:border-primary hover:bg-primary-soft transition"
             >
-              <div className="flex justify-between text-sm font-medium">
-                <span>{tx.transaction_items?.length || 0} item</span>
-                <span>{formatRupiah(tx.total)}</span>
-              </div>
-              <p className="text-xs text-ink-muted mt-0.5">{formatDateTime(tx.created_at)}</p>
-            </button>
+              <button
+                onClick={() => onRecall(tx)}
+                className="flex-1 text-left px-3 py-2.5 min-w-0"
+              >
+                <div className="flex justify-between text-sm font-medium">
+                  <span>{tx.transaction_items?.length || 0} item</span>
+                  <span>{formatRupiah(tx.total)}</span>
+                </div>
+                <p className="text-xs text-ink-muted mt-0.5">{formatDateTime(tx.created_at)}</p>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleDelete(e, tx)}
+                title="Batalkan transaksi tertahan ini"
+                className="shrink-0 px-3 flex items-center justify-center text-ink-muted hover:text-danger hover:bg-danger-soft rounded-r-lg"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           ))}
         </div>
         <button onClick={onClose} className="mt-4 w-full text-sm text-ink-muted py-2 hover:text-ink">

@@ -7,6 +7,8 @@ import { formatRupiah, formatDate, formatDateTime } from "@/lib/format";
 import { logActivity } from "@/lib/logActivity";
 import { Button, Card, Input, Modal, Select, Textarea, EmptyState, Badge } from "@/components/ui/kit";
 import { useBarcodeScan } from "@/lib/useBarcodeScan";
+import { useViewport } from "@/lib/useViewport";
+import CameraScanButton from "@/components/CameraScanButton";
 
 // Susunan kolom tingkatan harga per tipe produk, lengkap dengan modal & harga jual
 // yang sudah ada di data produk (jadi tidak perlu diketik ulang, cukup lihat sebagai
@@ -59,6 +61,7 @@ export default function PembelianPage() {
   const [form, setForm] = useState({ supplier_id: "", nota_number: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
   const [items, setItems] = useState([]);
   const [draftProductId, setDraftProductId] = useState("");
+  const { isMobile } = useViewport();
   const [draftTiers, setDraftTiers] = useState({}); // { [price_type]: { qty, newCost, newSell } }
 
   // Koreksi / Rusak: kurangi jumlah barang yang SUDAH ditambahkan di daftar
@@ -461,14 +464,30 @@ export default function PembelianPage() {
             <p className="text-sm font-medium mb-1">Barang Dipesan</p>
             <p className="text-xs text-ink-muted mb-3">Pilih barang, lalu isi jumlah yang diterima di tingkatan harga yang sesuai (bisa lebih dari satu). Kolom "Harga Baru" boleh dikosongkan kalau harga tidak berubah dari supplier.</p>
 
-            <Select
-              value={draftProductId}
-              onChange={(e) => { setDraftProductId(e.target.value); setDraftTiers({}); }}
-              className="mb-4"
-            >
-              <option value="">-- pilih barang (bisa scan barcode) --</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
+            <div className="flex items-center gap-2 mb-4">
+              <Select
+                value={draftProductId}
+                onChange={(e) => { setDraftProductId(e.target.value); setDraftTiers({}); }}
+                className="flex-1"
+              >
+                <option value="">-- pilih barang (bisa scan barcode) --</option>
+                {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </Select>
+              {isMobile && (
+                <CameraScanButton
+                  onDetected={(code) => {
+                    const match = products.find(
+                      (p) => p.sku === code || (p.product_barcodes || []).some((b) => b.barcode === code)
+                    );
+                    if (!match) return toast.error(`Barcode "${code}" tidak ditemukan`, { id: "scan-pembelian" });
+                    setDraftProductId(match.id);
+                    setDraftTiers({});
+                    toast.success(`Terpilih: ${match.name}`, { id: "scan-pembelian" });
+                  }}
+                  title="Cari barang pakai kamera"
+                />
+              )}
+            </div>
 
             {selectedProduct && (
               <div className="space-y-3 mb-4">
@@ -556,7 +575,7 @@ export default function PembelianPage() {
                 ) : (
                   <div className="border border-border rounded-lg p-3 space-y-3">
                     <p className="text-xs text-ink-muted">Kurangi jumlah salah satu barang di atas karena rusak saat diterima. Jumlah yang tersimpan di nota otomatis berkurang.</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <Select
                         label="Barang yang Rusak"
                         value={correctionForm.itemIndex}

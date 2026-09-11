@@ -7,6 +7,8 @@ import { formatRupiah, formatDateTime, formatNumber } from "@/lib/format";
 import { logActivity } from "@/lib/logActivity";
 import { Button, Card, EmptyState, Input, Select, Textarea, Badge } from "@/components/ui/kit";
 import { useBarcodeScan } from "@/lib/useBarcodeScan";
+import { useViewport } from "@/lib/useViewport";
+import CameraScanButton from "@/components/CameraScanButton";
 
 export default function ReturPage() {
   const supabase = createClient();
@@ -17,20 +19,23 @@ export default function ReturPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ product_id: "", qty: "", reason: "", refund_amount: "", supplier_id: "" });
+  const { isMobile } = useViewport();
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  // Scan barcode global: langsung pilihkan barang yang diretur.
-  useBarcodeScan((code) => {
+  function pickByBarcode(code) {
     const match = products.find(
       (p) => p.sku === code || (p.product_barcodes || []).some((b) => b.barcode === code)
     );
     if (!match) return toast.error(`Barcode "${code}" tidak ditemukan`, { id: "scan-retur" });
     setForm((f) => ({ ...f, product_id: match.id }));
     toast.success(`Terpilih: ${match.name}`, { id: "scan-retur" });
-  });
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  // Scan barcode global (scanner fisik / HP terhubung sebagai remote): langsung pilihkan barang yang diretur.
+  useBarcodeScan((code) => pickByBarcode(code));
 
 
   async function load() {
@@ -123,11 +128,17 @@ export default function ReturPage() {
       </div>
 
       <Card>
-        <div className="grid grid-cols-2 gap-3">
-          <Select label="Pilih Barang" value={form.product_id} onChange={(e) => setForm({ ...form, product_id: e.target.value })}>
-            <option value="">-- pilih --</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </Select>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Pilih Barang</label>
+            <div className="flex items-center gap-2">
+              <Select value={form.product_id} onChange={(e) => setForm({ ...form, product_id: e.target.value })} className="flex-1">
+                <option value="">-- pilih (bisa scan barcode) --</option>
+                {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </Select>
+              {isMobile && <CameraScanButton onDetected={pickByBarcode} title="Cari barang pakai kamera" />}
+            </div>
+          </div>
           <Input label="Jumlah" type="number" value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
           {tab === "supplier" && (
             <Select label="Supplier" value={form.supplier_id} onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}>

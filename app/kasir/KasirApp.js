@@ -22,7 +22,7 @@ import PaymentModal from "./components/PaymentModal";
 import PendingListModal from "./components/PendingListModal";
 import CameraScannerModal from "./components/CameraScannerModal";
 import ReceiptModal from "./components/ReceiptModal";
-import { Volume2, VolumeX, Search, Hash, PauseCircle, RotateCcw, CreditCard, PackageOpen, Menu, X, ScanLine } from "lucide-react";
+import { Volume2, VolumeX, Search, Hash, PauseCircle, RotateCcw, CreditCard, PackageOpen, Menu, X, ScanLine, Trash2 } from "lucide-react";
 
 export default function KasirApp({ profile, isAdminAccount, impersonating, initialShift, products, customers, settings, pendingTransactions }) {
   const supabase = createClient();
@@ -246,6 +246,30 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
     setSelectedIndex(-1);
   }
 
+  // ---------- Jalankan shortcut aksi lewat tap (khusus menu geser HP) ----------
+  // Di desktop shortcut ini dipicu tombol fisik F2/F4/F7/F8/F12/F6 lewat
+  // onKeydownGlobal di atas. Di HP tidak ada keyboard fisik, jadi daftar
+  // "Shortcut Aksi" di menu geser harus bisa DITEKAN LANGSUNG supaya benar-benar
+  // berfungsi, bukan cuma daftar info F-key yang tidak bisa dipakai.
+  function triggerMobileShortcut(key) {
+    setMobileMenuOpen(false);
+    if (key === "search") {
+      setTimeout(() => searchRef.current?.focus(), 50);
+    } else if (key === "qty") {
+      if (selectedIndex >= 0 && cart[selectedIndex]) setQtyModalItem(cart[selectedIndex]);
+      else toast.error("Pilih barang di keranjang dahulu");
+    } else if (key === "hold") {
+      holdTransaction();
+    } else if (key === "recall") {
+      setPendingOpen(true);
+    } else if (key === "pay") {
+      if (cart.length > 0) setPaymentOpen(true);
+      else toast.error("Keranjang masih kosong");
+    } else if (key === "drawer") {
+      openCashDrawer().catch((err) => toast.error(err.message));
+    }
+  }
+
   function resetCart() {
     setCart([]);
     setSelectedIndex(-1);
@@ -375,6 +399,20 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
 
     // Hapus record pending dari database karena sudah ditarik kembali ke keranjang
     supabase.from("transactions").delete().eq("id", tx.id).then(() => {});
+  }
+
+  // ---------- Batalkan transaksi tertahan (tombol X / tong sampah) ----------
+  async function deletePendingTransaction(tx) {
+    try {
+      const { error } = await supabase.from("transaction_items").delete().eq("transaction_id", tx.id);
+      if (error) throw error;
+      const { error: txError } = await supabase.from("transactions").delete().eq("id", tx.id);
+      if (txError) throw txError;
+      setPendingList((prev) => prev.filter((t) => t.id !== tx.id));
+      toast.success("Transaksi tertahan dibatalkan");
+    } catch (err) {
+      toast.error(err.message || "Gagal membatalkan transaksi tertahan");
+    }
   }
 
   // ---------- Checkout (F12 submit) ----------
@@ -622,18 +660,23 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             <div className="flex-1 overflow-auto p-3 space-y-4">
               <div>
                 <div className="flex items-center justify-between px-1 mb-1.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Shortcut Aksi</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Shortcut Aksi (tap untuk pakai)</p>
                   <span className="text-[10px] text-ink-muted italic">diatur admin</span>
                 </div>
                 <div className="space-y-1">
                   {SYSTEM_ACTIONS.map((a) => {
                     const Icon = a.icon;
                     return (
-                      <div key={a.key} className="w-full flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-sm bg-background">
+                      <button
+                        key={a.key}
+                        type="button"
+                        onClick={() => triggerMobileShortcut(a.key)}
+                        className="w-full flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-sm bg-background hover:border-primary hover:bg-primary-soft active:bg-primary-soft transition text-left"
+                      >
                         <Icon size={15} className="text-ink-muted shrink-0" />
                         <span className="flex-1 truncate">{a.label}</span>
                         <span className="kbd shrink-0">{hotkeys[a.key]}</span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -792,6 +835,29 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
                     </select>
                     <span className="text-xs text-ink-muted">{formatNumber(item.qty, 2)} x {formatRupiah(item.unit_price)}</span>
                   </div>
+                  {/* Di desktop qty/hapus dipakai lewat tombol F4/Delete di keyboard; di HP
+                      tidak ada keyboard, jadi disediakan tombol sentuh supaya tetap bisa dipakai. */}
+                  <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedIndex(index);
+                        setQtyModalItem(item);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-surface"
+                    >
+                      <Hash size={13} /> Ubah Qty
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Hapus "${item.name}" dari keranjang?`)) removeItem(index);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-2 py-1.5 text-xs font-medium text-danger hover:bg-danger/10"
+                    >
+                      <Trash2 size={13} /> Hapus
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -925,6 +991,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
           transactions={pendingList}
           hotkeyLabel={hotkeys.recall}
           onRecall={recallTransaction}
+          onDelete={deletePendingTransaction}
           onClose={() => setPendingOpen(false)}
         />
       )}
