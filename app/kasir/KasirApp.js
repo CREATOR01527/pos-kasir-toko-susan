@@ -790,18 +790,35 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         </div>
 
         {searchResults.length > 0 && (
-          <div className="border-b border-border bg-surface px-4 py-2 flex gap-2 overflow-x-auto">
-            {searchResults.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => handlePickProduct(p)}
-                className="shrink-0 rounded-lg border border-border px-3 py-2 text-xs hover:border-primary hover:bg-primary-soft"
-              >
-                <span className="font-medium">{p.name}</span>
-                <span className="text-ink-muted ml-1.5">{formatRupiah(p.sell_price)}</span>
-              </button>
-            ))}
-          </div>
+          isMobile ? (
+            // Versi HP: daftar hasil pencarian ditampilkan menurun (list ke bawah),
+            // supaya nama & harga barang kebaca penuh tanpa geser ke samping.
+            <div className="border-b border-border bg-surface max-h-64 overflow-y-auto">
+              {searchResults.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => handlePickProduct(p)}
+                  className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm border-b border-border last:border-b-0 hover:bg-primary-soft active:bg-primary-soft text-left"
+                >
+                  <span className="font-medium truncate">{p.name}</span>
+                  <span className="text-ink-muted shrink-0">{formatRupiah(p.sell_price)}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="border-b border-border bg-surface px-4 py-2 flex gap-2 overflow-x-auto">
+              {searchResults.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => handlePickProduct(p)}
+                  className="shrink-0 rounded-lg border border-border px-3 py-2 text-xs hover:border-primary hover:bg-primary-soft"
+                >
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-ink-muted ml-1.5">{formatRupiah(p.sell_price)}</span>
+                </button>
+              ))}
+            </div>
+          )
         )}
 
         {isMobile ? (
