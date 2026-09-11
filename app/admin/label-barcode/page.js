@@ -8,6 +8,8 @@ import { useBarcodeScan } from "@/lib/useBarcodeScan";
 import { printBarcodeLabels } from "@/lib/printBarcodeLabel";
 import { formatRupiah } from "@/lib/format";
 import { findBarcodeConflict } from "@/lib/checkBarcodeOwner";
+import { useViewport } from "@/lib/useViewport";
+import CameraScanButton from "@/components/CameraScanButton";
 
 export default function LabelBarcodePage() {
   const supabase = createClient();
@@ -17,6 +19,7 @@ export default function LabelBarcodePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ product_id: "", barcode: "", note: "", editingId: null });
+  const { isMobile } = useViewport();
   const [printQty, setPrintQty] = useState({});
   const [printing, setPrinting] = useState(null);
   const [storeName, setStoreName] = useState("");
@@ -144,7 +147,19 @@ export default function LabelBarcodePage() {
             <option value="">-- pilih --</option>
             {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </Select>
-          <Input label="Kode Barcode" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} placeholder="mis. 899000012345" />
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Kode Barcode</label>
+            <div className="flex items-center gap-2">
+              <input
+                value={form.barcode}
+                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                onWheel={(e) => e.currentTarget.blur()}
+                placeholder="mis. 899000012345"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+              />
+              {isMobile && <CameraScanButton onDetected={(code) => setForm((f) => ({ ...f, barcode: code }))} title="Isi barcode pakai kamera" />}
+            </div>
+          </div>
           <Input label="Catatan (opsional)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="mis. label curah" />
         </div>
         <div className="flex justify-end gap-2 mt-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatRupiah } from "@/lib/format";
 
 export default function PaymentModal({ total, customer, settings, hotkeyLabel, onClose, onSubmit, loading }) {
@@ -9,6 +9,22 @@ export default function PaymentModal({ total, customer, settings, hotkeyLabel, o
   const paidNum = parseFloat(paid) || 0;
   const change = method === "kasbon" ? 0 : Math.max(0, paidNum - total);
   const canKasbon = !!customer;
+  const canSubmit = !loading && (method === "kasbon" ? true : paidNum >= total);
+
+  // Enter menyelesaikan pembayaran (mempercepat kasir input via keyboard).
+  // Diabaikan kalau target-nya tombol yang sedang fokus, supaya tidak dobel
+  // dengan perilaku bawaan browser (Enter pada tombol yang fokus = klik).
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key !== "Enter") return;
+      if (e.target.tagName === "BUTTON") return;
+      e.preventDefault();
+      if (!canSubmit) return;
+      onSubmit({ method, paid: method === "kasbon" ? 0 : paidNum, change });
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canSubmit, method, paidNum, change, onSubmit]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -75,12 +91,13 @@ export default function PaymentModal({ total, customer, settings, hotkeyLabel, o
           </button>
           <button
             onClick={() => onSubmit({ method, paid: method === "kasbon" ? 0 : paidNum, change })}
-            disabled={loading || (method !== "kasbon" && paidNum < total)}
+            disabled={!canSubmit}
             className="flex-1 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-primary-hover disabled:opacity-60"
           >
             {loading ? "Memproses..." : "Selesaikan"}
           </button>
         </div>
+        <p className="text-xs text-ink-muted text-center mt-2">atau tekan <span className="kbd">Enter</span> untuk menyelesaikan</p>
       </div>
     </div>
   );

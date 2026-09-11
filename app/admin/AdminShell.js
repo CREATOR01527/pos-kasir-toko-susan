@@ -23,11 +23,14 @@ import {
   Bell,
   Moon,
   Sun,
+  Receipt,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useViewport } from "@/lib/useViewport";
 import ScannerStatusWidget from "@/components/ScannerStatusWidget";
 import toast from "react-hot-toast";
 import { formatRupiah } from "@/lib/format";
+import { Menu, X } from "lucide-react";
 
 const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -40,6 +43,7 @@ const NAV = [
   { href: "/admin/label-barcode", label: "Label & Barcode", icon: Tags },
   { href: "/admin/supplier", label: "Supplier", icon: Truck },
   { href: "/admin/pembelian", label: "Stok & Barang Masuk", icon: ShoppingCart },
+  { href: "/admin/transaksi", label: "Cek Transaksi Penjualan", icon: Receipt },
   { href: "/admin/pelanggan", label: "Pelanggan", icon: Users },
   { href: "/admin/log-aktivitas", label: "Log Aktivitas", icon: ScrollText },
   { href: "/admin/arsip", label: "Arsip Data", icon: Archive },
@@ -51,10 +55,21 @@ export default function AdminShell({ profile, settings, children }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const { isMobile, isTablet } = useViewport();
   const [dark, setDark] = useState(settings?.theme === "dark");
   const [lowStockCount, setLowStockCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [lowStockItems, setLowStockItems] = useState([]);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Sidebar mengecil (ikon saja) di tablet supaya halaman kerja lebih lega;
+  // di HP sidebar disembunyikan jadi menu geser (drawer) lewat tombol hamburger.
+  const sidebarWidth = isTablet ? "w-16" : "w-60";
+  const showLabels = !isTablet;
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -97,38 +112,100 @@ export default function AdminShell({ profile, settings, children }) {
 
   return (
     <div className="flex flex-1 h-screen overflow-hidden">
-      <aside className="w-60 shrink-0 border-r border-border bg-surface flex flex-col">
-        <div className="p-4 border-b border-border">
-          <p className="text-sm font-semibold truncate">{settings?.store_name || "Toko Saya"}</p>
-          <p className="text-xs text-ink-muted">Panel Admin</p>
+      {/* Sidebar tetap: disembunyikan di HP (diganti drawer di bawah), mengecil jadi ikon saja di tablet */}
+      {!isMobile && (
+        <aside className={`${sidebarWidth} shrink-0 border-r border-border bg-surface flex flex-col transition-all`}>
+          <div className={`p-4 border-b border-border ${!showLabels ? "px-2 text-center" : ""}`}>
+            {showLabels ? (
+              <>
+                <p className="text-sm font-semibold truncate">{settings?.store_name || "Toko Saya"}</p>
+                <p className="text-xs text-ink-muted">Panel Admin</p>
+              </>
+            ) : (
+              <p className="text-xs font-semibold truncate" title={settings?.store_name || "Toko Saya"}>
+                {(settings?.store_name || "TS").slice(0, 2).toUpperCase()}
+              </p>
+            )}
+          </div>
+          <nav className="flex-1 overflow-auto p-2 space-y-0.5">
+            {NAV.map((item) => {
+              const Icon = item.icon;
+              const active = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={item.label}
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${!showLabels ? "justify-center px-0" : ""} ${
+                    active ? "bg-primary-soft text-primary font-medium" : "text-ink-muted hover:bg-background hover:text-ink"
+                  }`}
+                >
+                  <Icon size={16} />
+                  {showLabels && item.label}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="p-3 border-t border-border">
+            <button
+              onClick={handleLogout}
+              title="Keluar"
+              className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger-soft ${!showLabels ? "justify-center px-0" : ""}`}
+            >
+              <LogOut size={16} /> {showLabels && "Keluar"}
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {/* Drawer menu untuk HP: sidebar penuh muncul dari kiri lewat tombol hamburger di header */}
+      {isMobile && mobileNavOpen && (
+        <div className="fixed inset-0 z-40 flex">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileNavOpen(false)} />
+          <aside className="relative w-64 max-w-[80vw] h-full bg-surface border-r border-border flex flex-col">
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold truncate">{settings?.store_name || "Toko Saya"}</p>
+                <p className="text-xs text-ink-muted">Panel Admin</p>
+              </div>
+              <button onClick={() => setMobileNavOpen(false)} className="p-1.5 rounded-lg hover:bg-background">
+                <X size={18} />
+              </button>
+            </div>
+            <nav className="flex-1 overflow-auto p-2 space-y-0.5">
+              {NAV.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+                      active ? "bg-primary-soft text-primary font-medium" : "text-ink-muted hover:bg-background hover:text-ink"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="p-3 border-t border-border">
+              <button onClick={handleLogout} className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger-soft">
+                <LogOut size={16} /> Keluar
+              </button>
+            </div>
+          </aside>
         </div>
-        <nav className="flex-1 overflow-auto p-2 space-y-0.5">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            const active = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
-                  active ? "bg-primary-soft text-primary font-medium" : "text-ink-muted hover:bg-background hover:text-ink"
-                }`}
-              >
-                <Icon size={16} />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="p-3 border-t border-border">
-          <button onClick={handleLogout} className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger-soft">
-            <LogOut size={16} /> Keluar
-          </button>
-        </div>
-      </aside>
+      )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-14 shrink-0 border-b border-border bg-surface flex items-center justify-end gap-2 px-5">
+        <header className="h-14 shrink-0 border-b border-border bg-surface flex items-center justify-end gap-2 px-3 sm:px-5">
+          {isMobile && (
+            <button onClick={() => setMobileNavOpen(true)} className="mr-auto p-2 rounded-lg hover:bg-background">
+              <Menu size={20} />
+            </button>
+          )}
           <ScannerStatusWidget />
           <div className="relative">
             <button onClick={() => setNotifOpen((v) => !v)} className="relative p-2 rounded-lg hover:bg-background">
@@ -162,7 +239,7 @@ export default function AdminShell({ profile, settings, children }) {
             <p className="text-xs text-ink-muted leading-tight">Admin</p>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-3 sm:p-6">{children}</main>
       </div>
     </div>
   );

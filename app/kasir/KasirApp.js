@@ -11,6 +11,7 @@ import { openCashDrawer } from "@/lib/cashDrawer";
 import { printReceipt } from "@/lib/printReceipt";
 import { useScanner, BARCODE_EVENT } from "@/components/ScannerProvider";
 import ScannerStatusWidget from "@/components/ScannerStatusWidget";
+import { useViewport } from "@/lib/useViewport";
 import { speakProductName, isVoiceEnabled, setVoiceEnabled } from "@/lib/voice";
 
 import OpeningCashModal from "./components/OpeningCashModal";
@@ -21,7 +22,7 @@ import PaymentModal from "./components/PaymentModal";
 import PendingListModal from "./components/PendingListModal";
 import CameraScannerModal from "./components/CameraScannerModal";
 import ReceiptModal from "./components/ReceiptModal";
-import { Volume2, VolumeX, Search, Hash, PauseCircle, RotateCcw, CreditCard, PackageOpen } from "lucide-react";
+import { Volume2, VolumeX, Search, Hash, PauseCircle, RotateCcw, CreditCard, PackageOpen, Menu, X, ScanLine } from "lucide-react";
 
 export default function KasirApp({ profile, isAdminAccount, impersonating, initialShift, products, customers, settings, pendingTransactions }) {
   const supabase = createClient();
@@ -61,6 +62,8 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
   const [voiceOn, setVoiceOn] = useState(true);
   const [lastReceipt, setLastReceipt] = useState(null);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const { isMobile, isTablet } = useViewport();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     setVoiceOn(isVoiceEnabled());
@@ -484,9 +487,9 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
       };
       setLastReceipt(receiptData);
       setReceiptModalOpen(true);
-      if (settings?.receipt_auto_print !== false) {
-        printReceipt(receiptData);
-      }
+      // Struk HANYA ditampilkan di layar dulu (ReceiptModal). Dialog cetak
+      // browser baru muncul kalau kasir menekan tombol "Cetak Struk" di
+      // modal itu -- tidak langsung terbuka otomatis setelah bayar.
 
       toast.success("Transaksi berhasil!");
       resetCart();
@@ -516,111 +519,221 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
 
   return (
     <div className="flex flex-1 h-screen overflow-hidden bg-background">
-      {/* SIDEBAR: hanya shortkey, diatur admin */}
-      <aside className="w-56 shrink-0 border-r border-border bg-surface flex flex-col">
-        <div className="p-4 border-b border-border">
-          <p className="text-sm font-semibold truncate">{settings?.store_name || "Toko"}</p>
-          <p className="text-xs text-ink-muted truncate">{profile.full_name}</p>
-          {impersonating && <p className="text-[10px] text-primary mt-0.5">Dibuka oleh admin</p>}
-          <div className="flex items-center gap-1.5 mt-2">
-            <span className={`h-2 w-2 rounded-full ${physicalActive || phoneConnected ? "bg-primary" : "bg-danger"}`} />
-            <span className="text-[11px] text-ink-muted">
-              Scanner {physicalActive || phoneConnected ? "Terhubung" : "Terputus"}
-            </span>
+      {/* SIDEBAR: hanya shortkey, diatur admin -- disembunyikan di HP (jadi menu geser), mengecil di tablet */}
+      {!isMobile && (
+        <aside className={`${isTablet ? "w-48" : "w-56"} shrink-0 border-r border-border bg-surface flex flex-col`}>
+          <div className="p-4 border-b border-border">
+            <p className="text-sm font-semibold truncate">{settings?.store_name || "Toko"}</p>
+            <p className="text-xs text-ink-muted truncate">{profile.full_name}</p>
+            {impersonating && <p className="text-[10px] text-primary mt-0.5">Dibuka oleh admin</p>}
+            <div className="flex items-center gap-1.5 mt-2">
+              <span className={`h-2 w-2 rounded-full ${physicalActive || phoneConnected ? "bg-primary" : "bg-danger"}`} />
+              <span className="text-[11px] text-ink-muted">
+                Scanner {physicalActive || phoneConnected ? "Terhubung" : "Terputus"}
+              </span>
+            </div>
+            <div className="mt-2">
+              <ScannerStatusWidget />
+            </div>
           </div>
-          <div className="mt-2">
-            <ScannerStatusWidget />
-          </div>
-        </div>
 
-        <div className="flex-1 overflow-auto p-3">
-          {/* Shortcut Aksi Sistem: F2/F4/F7/F8/F12/F6, bisa diatur admin */}
-          <div className="flex items-center justify-between px-1 mb-1.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Shortcut Aksi</p>
-            <span className="text-[10px] text-ink-muted italic">diatur admin</span>
+          <div className="flex-1 overflow-auto p-3">
+            {/* Shortcut Aksi Sistem: F2/F4/F7/F8/F12/F6, bisa diatur admin */}
+            <div className="flex items-center justify-between px-1 mb-1.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Shortcut Aksi</p>
+              <span className="text-[10px] text-ink-muted italic">diatur admin</span>
+            </div>
+            <div className="space-y-1">
+              {SYSTEM_ACTIONS.map((a) => {
+                const Icon = a.icon;
+                return (
+                  <div key={a.key} className="w-full flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-sm bg-background">
+                    <Icon size={15} className="text-ink-muted shrink-0" />
+                    <span className="flex-1 truncate">{a.label}</span>
+                    <span className="kbd shrink-0">{hotkeys[a.key]}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="space-y-1">
-            {SYSTEM_ACTIONS.map((a) => {
-              const Icon = a.icon;
-              return (
-                <div key={a.key} className="w-full flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-sm bg-background">
-                  <Icon size={15} className="text-ink-muted shrink-0" />
-                  <span className="flex-1 truncate">{a.label}</span>
-                  <span className="kbd shrink-0">{hotkeys[a.key]}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
 
-        <div className="p-3 border-t border-border space-y-1.5">
-          <button
-            onClick={() => {
-              const next = !voiceOn;
-              setVoiceOn(next);
-              setVoiceEnabled(next);
-            }}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
-          >
-            {voiceOn ? <Volume2 size={14} /> : <VolumeX size={14} />}
-            Suara Nama Barang: {voiceOn ? "Aktif" : "Mati"}
-          </button>
-          <button
-            onClick={() => setCameraOpen(true)}
-            className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
-          >
-            Scan via Kamera HP
-          </button>
-          <button
-            onClick={() => lastReceipt && setReceiptModalOpen(true)}
-            disabled={!lastReceipt}
-            className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Lihat / Cetak Ulang Struk Terakhir
-          </button>
-          <button
-            onClick={() => {
-              if (cart.length > 0) {
-                toast.error(`Selesaikan atau tahan (${hotkeys.hold}) keranjang dahulu sebelum menutup shift`);
-                return;
-              }
-              setCloseShiftOpen(true);
-            }}
-            className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
-          >
-            Tutup Shift
-          </button>
-          <button onClick={handleLogout} className="w-full rounded-lg px-3 py-2 text-xs font-medium text-danger hover:bg-danger-soft">
-            {impersonating ? "Kembali (Tanpa Tutup Shift)" : "Keluar (Tanpa Tutup Shift)"}
-          </button>
-          {isAdminAccount && (
+          <div className="p-3 border-t border-border space-y-1.5">
             <button
-              onClick={() => router.push("/admin/dashboard")}
+              onClick={() => {
+                const next = !voiceOn;
+                setVoiceOn(next);
+                setVoiceEnabled(next);
+              }}
+              className="w-full flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
+            >
+              {voiceOn ? <Volume2 size={14} /> : <VolumeX size={14} />}
+              Suara Nama Barang: {voiceOn ? "Aktif" : "Mati"}
+            </button>
+            <button
+              onClick={() => lastReceipt && setReceiptModalOpen(true)}
+              disabled={!lastReceipt}
+              className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Lihat / Cetak Ulang Struk Terakhir
+            </button>
+            <button
+              onClick={() => {
+                if (cart.length > 0) {
+                  toast.error(`Selesaikan atau tahan (${hotkeys.hold}) keranjang dahulu sebelum menutup shift`);
+                  return;
+                }
+                setCloseShiftOpen(true);
+              }}
               className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
             >
-              ← Kembali ke Admin
+              Tutup Shift
             </button>
-          )}
+            <button onClick={handleLogout} className="w-full rounded-lg px-3 py-2 text-xs font-medium text-danger hover:bg-danger-soft">
+              {impersonating ? "Kembali (Tanpa Tutup Shift)" : "Keluar (Tanpa Tutup Shift)"}
+            </button>
+            {isAdminAccount && (
+              <button
+                onClick={() => router.push("/admin/dashboard")}
+                className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
+              >
+                ← Kembali ke Admin
+              </button>
+            )}
+          </div>
+        </aside>
+      )}
+
+      {/* MENU GESER (khusus HP): berisi semua yang ada di sidebar desktop, dibuka lewat tombol hamburger */}
+      {isMobile && mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileMenuOpen(false)} />
+          <aside className="relative w-72 max-w-[85vw] h-full bg-surface border-r border-border flex flex-col">
+            <div className="p-4 border-b border-border flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold truncate">{settings?.store_name || "Toko"}</p>
+                <p className="text-xs text-ink-muted truncate">{profile.full_name}</p>
+                {impersonating && <p className="text-[10px] text-primary mt-0.5">Dibuka oleh admin</p>}
+              </div>
+              <button onClick={() => setMobileMenuOpen(false)} className="p-1.5 rounded-lg hover:bg-background">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-3 space-y-4">
+              <div>
+                <div className="flex items-center justify-between px-1 mb-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Shortcut Aksi</p>
+                  <span className="text-[10px] text-ink-muted italic">diatur admin</span>
+                </div>
+                <div className="space-y-1">
+                  {SYSTEM_ACTIONS.map((a) => {
+                    const Icon = a.icon;
+                    return (
+                      <div key={a.key} className="w-full flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-sm bg-background">
+                        <Icon size={15} className="text-ink-muted shrink-0" />
+                        <span className="flex-1 truncate">{a.label}</span>
+                        <span className="kbd shrink-0">{hotkeys[a.key]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-1 border-t border-border">
+                <button
+                  onClick={() => {
+                    const next = !voiceOn;
+                    setVoiceOn(next);
+                    setVoiceEnabled(next);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
+                >
+                  {voiceOn ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                  Suara Nama Barang: {voiceOn ? "Aktif" : "Mati"}
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setCameraOpen(true);
+                  }}
+                  className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
+                >
+                  Scan via Kamera HP
+                </button>
+                <button
+                  onClick={() => lastReceipt && setReceiptModalOpen(true)}
+                  disabled={!lastReceipt}
+                  className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Lihat / Cetak Ulang Struk Terakhir
+                </button>
+                <button
+                  onClick={() => {
+                    if (cart.length > 0) {
+                      toast.error(`Selesaikan atau tahan (${hotkeys.hold}) keranjang dahulu sebelum menutup shift`);
+                      return;
+                    }
+                    setCloseShiftOpen(true);
+                  }}
+                  className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
+                >
+                  Tutup Shift
+                </button>
+                <button onClick={handleLogout} className="w-full rounded-lg px-3 py-2 text-xs font-medium text-danger hover:bg-danger-soft">
+                  {impersonating ? "Kembali (Tanpa Tutup Shift)" : "Keluar (Tanpa Tutup Shift)"}
+                </button>
+                {isAdminAccount && (
+                  <button
+                    onClick={() => router.push("/admin/dashboard")}
+                    className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
+                  >
+                    ← Kembali ke Admin
+                  </button>
+                )}
+              </div>
+            </div>
+          </aside>
         </div>
-      </aside>
+      )}
 
       {/* AREA KERANJANG */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-border bg-surface flex items-center gap-3">
-          <input
-            ref={searchRef}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && searchResults[0]) handlePickProduct(searchResults[0]);
-            }}
-            placeholder={`Cari nama barang... (${hotkeys.search})`}
-            className="flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
-          />
+        {/* Baris atas khusus HP: menu (hamburger) + konek scanner, DI ATAS kolom pencarian */}
+        {isMobile && (
+          <div className="p-2.5 border-b border-border bg-surface flex items-center gap-2">
+            <button onClick={() => setMobileMenuOpen(true)} className="p-2 rounded-lg border border-border hover:bg-background shrink-0">
+              <Menu size={18} />
+            </button>
+            <ScannerStatusWidget />
+            <span className="text-xs text-ink-muted truncate ml-auto">{profile.full_name}</span>
+          </div>
+        )}
+        <div className="p-4 border-b border-border bg-surface flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex-1 flex items-center gap-2">
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && searchResults[0]) handlePickProduct(searchResults[0]);
+              }}
+              placeholder={`Cari nama barang... (${hotkeys.search})`}
+              className="flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            {isMobile && (
+              <button
+                onClick={() => setCameraOpen(true)}
+                title="Pindai barcode dengan kamera"
+                className="shrink-0 rounded-lg border border-border bg-background px-3 py-2.5 hover:bg-surface"
+              >
+                <ScanLine size={18} />
+              </button>
+            )}
+          </div>
           <select
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
-            className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none max-w-[180px]"
+            className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none sm:max-w-[180px]"
           >
             <option value="">Pelanggan Umum</option>
             {customers.map((c) => (
@@ -646,28 +759,26 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
           </div>
         )}
 
-        <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-surface border-b border-border text-xs text-ink-muted">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium">Barang</th>
-                <th className="text-left px-4 py-2 font-medium">Jenis</th>
-                <th className="text-right px-4 py-2 font-medium">Harga</th>
-                <th className="text-right px-4 py-2 font-medium">Qty</th>
-                <th className="text-right px-4 py-2 font-medium">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cart.map((item, index) => (
-                <tr
+        {isMobile ? (
+          <div className="flex-1 overflow-auto p-3 space-y-2">
+            {cart.length === 0 ? (
+              <p className="text-center text-ink-muted py-16 text-sm">
+                Keranjang kosong. Cari barang atau gunakan scan barcode.
+              </p>
+            ) : (
+              cart.map((item, index) => (
+                <div
                   key={item.key}
                   onClick={() => setSelectedIndex(index)}
-                  className={`border-b border-border cursor-pointer ${
-                    selectedIndex === index ? "bg-primary-soft" : "hover:bg-background"
+                  className={`rounded-xl border p-3 ${
+                    selectedIndex === index ? "border-primary bg-primary-soft" : "border-border bg-surface"
                   }`}
                 >
-                  <td className="px-4 py-2.5">{item.name}</td>
-                  <td className="px-4 py-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium flex-1 truncate">{item.name}</p>
+                    <p className="text-sm font-semibold">{formatRupiah(item.unit_price * item.qty)}</p>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-1.5" onClick={(e) => e.stopPropagation()}>
                     <select
                       value={item.price_type}
                       onChange={(e) => changeCartItemVariant(index, e.target.value)}
@@ -679,26 +790,67 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
                         </option>
                       ))}
                     </select>
-                  </td>
-                  <td className="px-4 py-2.5 text-right">{formatRupiah(item.unit_price)}</td>
-                  <td className="px-4 py-2.5 text-right">{formatNumber(item.qty, 2)}</td>
-                  <td className="px-4 py-2.5 text-right font-medium">{formatRupiah(item.unit_price * item.qty)}</td>
-                </tr>
-              ))}
-              {cart.length === 0 && (
+                    <span className="text-xs text-ink-muted">{formatNumber(item.qty, 2)} x {formatRupiah(item.unit_price)}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-surface border-b border-border text-xs text-ink-muted">
                 <tr>
-                  <td colSpan={5} className="text-center text-ink-muted py-16 text-sm">
-                    Keranjang kosong. Cari barang atau gunakan shortcut / scan barcode.
-                  </td>
+                  <th className="text-left px-4 py-2 font-medium">Barang</th>
+                  <th className="text-left px-4 py-2 font-medium">Jenis</th>
+                  <th className="text-right px-4 py-2 font-medium">Harga</th>
+                  <th className="text-right px-4 py-2 font-medium">Qty</th>
+                  <th className="text-right px-4 py-2 font-medium">Subtotal</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {cart.map((item, index) => (
+                  <tr
+                    key={item.key}
+                    onClick={() => setSelectedIndex(index)}
+                    className={`border-b border-border cursor-pointer ${
+                      selectedIndex === index ? "bg-primary-soft" : "hover:bg-background"
+                    }`}
+                  >
+                    <td className="px-4 py-2.5">{item.name}</td>
+                    <td className="px-4 py-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={item.price_type}
+                        onChange={(e) => changeCartItemVariant(index, e.target.value)}
+                        className="rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/40 max-w-[150px]"
+                      >
+                        {getPriceVariants(products.find((p) => p.id === item.product_id) || {}).map((v) => (
+                          <option key={v.price_type} value={v.price_type}>
+                            {v.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">{formatRupiah(item.unit_price)}</td>
+                    <td className="px-4 py-2.5 text-right">{formatNumber(item.qty, 2)}</td>
+                    <td className="px-4 py-2.5 text-right font-medium">{formatRupiah(item.unit_price * item.qty)}</td>
+                  </tr>
+                ))}
+                {cart.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-center text-ink-muted py-16 text-sm">
+                      Keranjang kosong. Cari barang atau gunakan shortcut / scan barcode.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Ringkasan & shortkey */}
-        <div className="border-t border-border bg-surface p-4">
-          <div className="flex items-center gap-3 mb-3">
+        <div className="border-t border-border bg-surface p-3 sm:p-4">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             <label className="text-sm text-ink-muted whitespace-nowrap">Diskon</label>
             <input
               value={manualDiscount}
@@ -706,27 +858,27 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
               onWheel={(e) => e.currentTarget.blur()}
               inputMode="numeric"
               placeholder="0"
-              className="w-28 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-right outline-none focus:ring-2 focus:ring-primary/40"
+              className="w-24 sm:w-28 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-right outline-none focus:ring-2 focus:ring-primary/40"
             />
-            <label className="text-sm text-ink-muted whitespace-nowrap">Biaya Antar</label>
+            <label className="text-sm text-ink-muted whitespace-nowrap">Antar</label>
             <input
               value={deliveryFee}
               onChange={(e) => setDeliveryFee(e.target.value)}
               onWheel={(e) => e.currentTarget.blur()}
               inputMode="numeric"
               placeholder="0"
-              className="w-32 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-right outline-none focus:ring-2 focus:ring-primary/40"
+              className="w-24 sm:w-32 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-right outline-none focus:ring-2 focus:ring-primary/40"
             />
-            <div className="flex-1" />
-            <div className="text-right">
+            <div className="hidden sm:block flex-1" />
+            <div className="text-right ml-auto sm:ml-0">
               {totals.discount > 0 && <p className="text-xs text-danger">Diskon -{formatRupiah(totals.discount)}</p>}
               <p className="text-xs text-ink-muted">Total</p>
-              <p className="text-xl font-semibold">{formatRupiah(totals.total)}</p>
+              <p className="text-lg sm:text-xl font-semibold">{formatRupiah(totals.total)}</p>
             </div>
             <button
               onClick={() => cart.length > 0 && setPaymentOpen(true)}
               disabled={cart.length === 0}
-              className="bg-primary text-white rounded-lg px-6 py-2.5 text-sm font-medium hover:bg-primary-hover disabled:opacity-40"
+              className="w-full sm:w-auto bg-primary text-white rounded-lg px-6 py-2.5 text-sm font-medium hover:bg-primary-hover disabled:opacity-40 order-last"
             >
               Bayar ({hotkeys.pay})
             </button>

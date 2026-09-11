@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const [supplierDebt, setSupplierDebt] = useState({ outstanding: [], totalOutstanding: 0, paidTransfer: 0, paidCash: 0 });
   const [pendingReturns, setPendingReturns] = useState([]);
   const [exporting, setExporting] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const [historyStart, setHistoryStart] = useState("");
   const [historyEnd, setHistoryEnd] = useState("");
@@ -41,11 +42,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load();
+
+    // Realtime: begitu ada transaksi baru/berubah, grafik & angka-angka lain
+    // langsung dimuat ulang tanpa perlu refresh halaman manual.
     const channel = supabase
       .channel("dashboard-realtime")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "transactions" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
       .subscribe();
-    return () => supabase.removeChannel(channel);
+
+    // Jaring pengaman: tetap muat ulang tiap 30 detik walau koneksi realtime
+    // sempat putus (mis. tab lama tidak aktif / jaringan sempat terputus).
+    const interval = setInterval(load, 30000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -140,6 +152,7 @@ export default function DashboardPage() {
     setSupplierDebt({ outstanding: pos || [], totalOutstanding, paidTransfer, paidCash });
     setPendingReturns(pendingRet || []);
 
+    setLastUpdated(new Date());
     setLoading(false);
   }
 
@@ -314,7 +327,18 @@ export default function DashboardPage() {
         )}
       </Card>
 
-      <Card title="Tren Penjualan 7 Hari Terakhir">
+      <Card
+        title="Tren Penjualan 7 Hari Terakhir"
+        action={
+          <div className="flex items-center gap-1.5 text-xs text-ink-muted">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+            </span>
+            Live{lastUpdated ? ` · update ${lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : ""}
+          </div>
+        }
+      >
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={dailyTrend}>
@@ -372,10 +396,13 @@ export default function DashboardPage() {
               {recent.map((tx) => (
                 <div key={tx.id} className="flex items-center justify-between text-sm py-1.5 border-b border-border last:border-0">
                   <div>
-                    <p className="font-medium">{formatRupiah(tx.total)}</p>
+                    <p className="font-medium">TRX-{tx.id.slice(0, 8).toUpperCase()}</p>
                     <p className="text-xs text-ink-muted">{tx.profiles?.full_name} · {formatDateTime(tx.created_at)}</p>
                   </div>
-                  <span className="text-xs text-ink-muted capitalize">{tx.payment_method}</span>
+                  <div className="text-right">
+                    <p className="font-medium">{formatRupiah(tx.total)}</p>
+                    <p className="text-xs text-ink-muted capitalize">{tx.payment_method}</p>
+                  </div>
                 </div>
               ))}
             </div>

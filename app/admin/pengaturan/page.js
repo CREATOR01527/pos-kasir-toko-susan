@@ -56,8 +56,8 @@ export default function PengaturanPage() {
 
       <Card title="Pengaturan Struk">
         <p className="text-xs text-ink-muted mb-3">
-          Struk dicetak otomatis setelah transaksi kasir selesai (kalau &quot;Cetak Otomatis&quot; aktif),
-          atau bisa dicetak ulang manual lewat tombol &quot;Cetak Ulang Struk Terakhir&quot; di layar Kasir.
+          Setelah transaksi kasir selesai, struk tampil dulu di layar (tidak langsung ke dialog cetak printer).
+          Kasir menekan tombol &quot;Cetak Struk&quot; di layar itu untuk mencetak, atau &quot;Lihat / Cetak Ulang Struk Terakhir&quot; untuk cetak ulang.
         </p>
         <Select
           label="Ukuran Kertas Printer"
@@ -69,11 +69,6 @@ export default function PengaturanPage() {
           <option value="80mm">80mm</option>
         </Select>
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-          <Toggle
-            checked={form.receipt_auto_print !== false}
-            onChange={(v) => setForm({ ...form, receipt_auto_print: v })}
-            label="Cetak otomatis setelah bayar"
-          />
           <Toggle
             checked={form.receipt_show_cashier !== false}
             onChange={(v) => setForm({ ...form, receipt_show_cashier: v })}

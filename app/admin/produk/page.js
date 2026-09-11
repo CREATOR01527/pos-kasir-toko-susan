@@ -7,6 +7,8 @@ import { formatRupiah, formatNumber } from "@/lib/format";
 import { Button, Card, Input, Modal, Toggle, EmptyState, Badge } from "@/components/ui/kit";
 import { useBarcodeScan } from "@/lib/useBarcodeScan";
 import { findBarcodeConflict } from "@/lib/checkBarcodeOwner";
+import { useViewport } from "@/lib/useViewport";
+import CameraScanButton from "@/components/CameraScanButton";
 
 const emptyForm = {
   id: null,
@@ -42,6 +44,7 @@ export default function ProdukPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const { isMobile } = useViewport();
 
   useEffect(() => {
     load();
@@ -234,7 +237,10 @@ export default function ProdukPage() {
         <Button onClick={() => setTypeChoiceOpen(true)}>+ Tambah Produk</Button>
       </div>
 
-      <Input placeholder="Cari produk / barcode..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
+      <div className="flex items-center gap-2 max-w-xs">
+        <Input placeholder="Cari produk / barcode..." value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1" />
+        {isMobile && <CameraScanButton onDetected={(code) => setSearch(code)} title="Cari produk pakai kamera" />}
+      </div>
 
       <Card>
         {loading ? (
@@ -307,12 +313,19 @@ export default function ProdukPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <Input label="Nama Produk" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <Input
-                label="Barcode Utama / SKU"
-                value={form.sku}
-                onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                hint="Dicocokkan saat scan barcode di kasir."
-              />
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Barcode Utama / SKU</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={form.sku}
+                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    onWheel={(e) => e.currentTarget.blur()}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                  />
+                  {isMobile && <CameraScanButton onDetected={(code) => setForm((f) => ({ ...f, sku: code }))} title="Isi barcode pakai kamera" />}
+                </div>
+                <p className="text-xs text-ink-muted mt-1">Dicocokkan saat scan barcode di kasir.</p>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
