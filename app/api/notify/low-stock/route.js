@@ -28,18 +28,19 @@ async function runLowStockCheck(service, { isTest = false } = {}) {
     return { sent: false, message: "Bot Token / Chat ID Telegram belum diisi di Pengaturan" };
   }
 
-  const { data: products } = await service
-    .from("products")
-    .select("id, name, stock_qty, min_stock, last_low_stock_notified_at")
-    .eq("active", true)
+  const { data: rows } = await service
+    .from("product_branch_stock")
+    .select("product_id, stock_qty, min_stock, products(id, name, active, last_low_stock_notified_at), branches(name)")
     .gt("min_stock", 0);
 
   const now = Date.now();
-  const due = (products || []).filter((p) => {
-    if (Number(p.stock_qty) > Number(p.min_stock)) return false;
+  const due = (rows || []).filter((r) => {
+    if (!r.products?.active) return false;
+    if (Number(r.stock_qty) > Number(r.min_stock)) return false;
     if (isTest) return true;
-    if (!p.last_low_stock_notified_at) return true;
-    return now - new Date(p.last_low_stock_notified_at).getTime() > 20 * 3600 * 1000;
+    const lastNotified = r.products?.last_low_stock_notified_at;
+    if (!lastNotified) return true;
+    return now - new Date(lastNotified).getTime() > 20 * 3600 * 1000;
   });
 
   if (due.length === 0) {
@@ -52,18 +53,20 @@ async function runLowStockCheck(service, { isTest = false } = {}) {
   }
 
   const lines = [`<b>⚠️ Stok Menipis — ${escapeHtml(settings.store_name || "Toko")}</b>`, ""];
-  for (const p of due.slice(0, 30)) {
-    lines.push(`• ${escapeHtml(p.name)}: sisa ${formatNumber(p.stock_qty, 2)} (min. ${formatNumber(p.min_stock, 2)})`);
+  for (const r of due.slice(0, 30)) {
+    const branchNote = due.some((x) => x.branches?.name !== due[0].branches?.name) && r.branches?.name ? ` [${escapeHtml(r.branches.name)}]` : "";
+    lines.push(`• ${escapeHtml(r.products?.name || "-")}${branchNote}: sisa ${formatNumber(r.stock_qty, 2)} (min. ${formatNumber(r.min_stock, 2)})`);
   }
-  if (due.length > 30) lines.push(`...dan ${due.length - 30} barang lainnya`);
+  if (due.length > 30) lines.push(`...dan ${due.length - 30} baris lainnya`);
 
   await sendTelegramMessage(settings.telegram_bot_token, settings.telegram_chat_id, lines.join("\n"));
 
   if (!isTest) {
+    const productIds = [...new Set(due.map((r) => r.product_id))];
     await service
       .from("products")
       .update({ last_low_stock_notified_at: new Date().toISOString() })
-      .in("id", due.map((p) => p.id));
+      .in("id", productIds);
   }
 
   return { sent: true, message: `Terkirim ke Telegram (${due.length} barang)` };

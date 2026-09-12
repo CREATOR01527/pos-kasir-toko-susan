@@ -10,16 +10,18 @@ import { useBarcodeScan } from "@/lib/useBarcodeScan";
 import { useViewport } from "@/lib/useViewport";
 import CameraScanButton from "@/components/CameraScanButton";
 import { findProductByCode } from "@/lib/barcode";
+import { getBranchStock } from "@/lib/branchStock";
 
 export default function ReturPage() {
   const supabase = createClient();
   const [tab, setTab] = useState("customer");
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ product_id: "", qty: "", reason: "", refund_amount: "", supplier_id: "" });
+  const [form, setForm] = useState({ product_id: "", qty: "", reason: "", refund_amount: "", supplier_id: "", branch_id: "" });
   const { isMobile } = useViewport();
 
   function pickByBarcode(code) {
@@ -45,14 +47,17 @@ export default function ReturPage() {
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     await supabase.from("returns").delete().eq("pickup_status", "sudah_diambil").lt("picked_up_at", oneMonthAgo.toISOString());
 
-    const [{ data: p }, { data: s }, { data: r }] = await Promise.all([
-      supabase.from("products").select("id, name, stock_qty, sell_price, sku, product_barcodes(barcode)").eq("active", true).order("name"),
+    const [{ data: p }, { data: s }, { data: r }, { data: b }] = await Promise.all([
+      supabase.from("products").select("id, name, sell_price, sku, product_barcodes(barcode), product_branch_stock(*)").eq("active", true).order("name"),
       supabase.from("suppliers").select("id, name").eq("active", true).order("name"),
-      supabase.from("returns").select("*, products(name), suppliers:reference_supplier_id(name)").order("created_at", { ascending: false }).limit(100),
+      supabase.from("returns").select("*, products(name), suppliers:reference_supplier_id(name), branches(name)").order("created_at", { ascending: false }).limit(100),
+      supabase.from("branches").select("*").eq("active", true).order("created_at", { ascending: true }),
     ]);
     setProducts(p || []);
     setSuppliers(s || []);
     setReturns(r || []);
+    setBranches(b || []);
+    setForm((f) => ({ ...f, branch_id: f.branch_id || b?.[0]?.id || "" }));
     setLoading(false);
   }
 
@@ -70,15 +75,18 @@ export default function ReturPage() {
 
   async function submit() {
     if (!form.product_id || !form.qty) return toast.error("Pilih barang dan isi jumlah");
+    if (branches.length > 1 && !form.branch_id) return toast.error("Pilih cabang untuk retur ini");
     setSaving(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
       const product = products.find((p) => p.id === form.product_id);
       const qty = Number(form.qty);
+      const branchId = form.branch_id || branches[0]?.id || null;
 
       await supabase.from("returns").insert({
         return_type: tab,
         product_id: form.product_id,
+        branch_id: branchId,
         qty,
         reason: form.reason || null,
         refund_amount: Number(form.refund_amount) || 0,
@@ -91,9 +99,15 @@ export default function ReturPage() {
 
       // retur dari pelanggan -> stok kembali bertambah; retur ke supplier -> stok berkurang
       const stockDelta = tab === "customer" ? qty : -qty;
-      await supabase.from("products").update({ stock_qty: Math.max(0, Number(product.stock_qty) + stockDelta) }).eq("id", form.product_id);
+      const branchStock = getBranchStock(product, branchId);
+      const newStock = Math.max(0, branchStock.stock_qty + stockDelta);
+      await supabase.from("product_branch_stock").upsert(
+        { product_id: form.product_id, branch_id: branchId, stock_qty: newStock, min_stock: branchStock.min_stock },
+        { onConflict: "product_id,branch_id" }
+      );
       await supabase.from("stock_movements").insert({
         product_id: form.product_id,
+        branch_id: branchId,
         movement_type: "retur",
         qty: stockDelta,
         note: `Retur ${tab === "customer" ? "dari pelanggan" : "ke supplier"}: ${form.reason || "-"}`,
@@ -102,7 +116,7 @@ export default function ReturPage() {
 
       await logActivity(supabase, { userId: userData?.user?.id, action: "return_item", entity: "returns", details: { type: tab, qty } });
       toast.success("Retur dicatat");
-      setForm({ product_id: "", qty: "", reason: "", refund_amount: "", supplier_id: "" });
+      setForm({ product_id: "", qty: "", reason: "", refund_amount: "", supplier_id: "", branch_id: form.branch_id });
       load();
     } catch (err) {
       toast.error(err.message);
@@ -147,6 +161,11 @@ export default function ReturPage() {
           )}
           {tab === "customer" && (
             <Input label="Nominal Refund (opsional)" type="number" value={form.refund_amount} onChange={(e) => setForm({ ...form, refund_amount: e.target.value })} />
+          )}
+          {branches.length > 1 && (
+            <Select label="Cabang" value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })}>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </Select>
           )}
         </div>
         <Textarea label="Alasan Retur" placeholder="mis. barang cacat / salah kirim" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className="mt-3" rows={2} />

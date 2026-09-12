@@ -36,12 +36,12 @@ export default async function KasirPage({ searchParams }) {
     .limit(1)
     .maybeSingle();
 
-  const [{ data: products }, { data: customers }, { data: settings }, { data: pendingTx }] =
+  const [{ data: products }, { data: customers }, { data: settings }, { data: pendingTx }, { data: branches }] =
     await Promise.all([
       supabase
         .from("products")
         .select(
-          "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes(*)"
+          "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes(*), product_branch_stock(*)"
         )
         .eq("active", true)
         .order("name"),
@@ -53,7 +53,15 @@ export default async function KasirPage({ searchParams }) {
         .eq("cashier_id", profile.id)
         .eq("status", "pending")
         .order("created_at", { ascending: false }),
+      supabase.from("branches").select("*").eq("active", true).order("created_at", { ascending: true }),
     ]);
+
+  // Cabang untuk sesi kasir ini: kalau akun ini sudah ditugaskan ke satu cabang
+  // (kasir), pakai itu. Kalau tidak (admin membuka kasir langsung, bukan lewat
+  // "Buka Kasir atas nama..." kasir tertentu) dan cuma ada 1 cabang aktif,
+  // pakai cabang itu otomatis. Kalau ada >1 cabang dan belum jelas, KasirApp
+  // akan minta dipilih dulu sebelum transaksi bisa dimulai.
+  const resolvedBranchId = profile.branch_id || (branches?.length === 1 ? branches[0].id : null);
 
   return (
     <KasirApp
@@ -65,6 +73,8 @@ export default async function KasirPage({ searchParams }) {
       customers={customers || []}
       settings={settings || null}
       pendingTransactions={pendingTx || []}
+      branches={branches || []}
+      resolvedBranchId={resolvedBranchId}
     />
   );
 }

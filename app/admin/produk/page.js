@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
 import { formatRupiah, formatNumber } from "@/lib/format";
-import { Button, Card, Input, Modal, Toggle, EmptyState, Badge } from "@/components/ui/kit";
+import { Button, Card, Input, Modal, Select, Toggle, EmptyState, Badge } from "@/components/ui/kit";
 import { useBarcodeScan } from "@/lib/useBarcodeScan";
 import { findBarcodeConflict } from "@/lib/checkBarcodeOwner";
 import { useViewport } from "@/lib/useViewport";
+import { getBranchStock } from "@/lib/branchStock";
 import CameraScanButton from "@/components/CameraScanButton";
 
 const emptyForm = {
@@ -45,10 +46,16 @@ export default function ProdukPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [branches, setBranches] = useState([]);
+  const [activeBranch, setActiveBranch] = useState("");
   const { isMobile } = useViewport();
 
   useEffect(() => {
     load();
+    supabase.from("branches").select("*").eq("active", true).order("created_at", { ascending: true }).then(({ data }) => {
+      setBranches(data || []);
+      setActiveBranch((prev) => prev || data?.[0]?.id || "");
+    });
   }, []);
 
   async function load() {
@@ -56,7 +63,7 @@ export default function ProdukPage() {
     const { data } = await supabase
       .from("products")
       .select(
-        "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes(*)"
+        "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes(*), product_branch_stock(*)"
       )
       .order("created_at", { ascending: false });
     setProducts(data || []);
@@ -90,6 +97,7 @@ export default function ProdukPage() {
     const w = p.product_wholesale_pricing?.[0] || p.product_wholesale_pricing || {};
     const k = p.product_kg_pricing?.[0] || p.product_kg_pricing || {};
     const oot = p.product_out_of_town_pricing?.[0] || p.product_out_of_town_pricing || {};
+    const branchStock = getBranchStock(p, activeBranch);
     setForm({
       id: p.id,
       name: p.name,
@@ -97,8 +105,8 @@ export default function ProdukPage() {
       unit_type: p.unit_type,
       cost_price: p.cost_price,
       sell_price: p.sell_price,
-      stock_qty: p.stock_qty,
-      min_stock: p.min_stock,
+      stock_qty: branchStock.stock_qty,
+      min_stock: branchStock.min_stock,
       tax_rate: p.tax_rate || "",
       active: p.active,
       wholesale_qty: w.wholesale_qty || "",
@@ -153,8 +161,6 @@ export default function ProdukPage() {
         unit_type: form.unit_type,
         cost_price: isKg ? Number(form.cost_per_kg) || 0 : Number(form.cost_price) || 0,
         sell_price: isKg ? Number(form.price_per_kg) || 0 : Number(form.sell_price) || 0,
-        stock_qty: Number(form.stock_qty) || 0,
-        min_stock: Number(form.min_stock) || 0,
         tax_rate: Math.min(100, Math.max(0, Number(form.tax_rate) || 0)),
         active: form.active,
       };
@@ -167,6 +173,20 @@ export default function ProdukPage() {
         const { data, error } = await supabase.from("products").insert(payload).select().single();
         if (error) throw error;
         productId = data.id;
+      }
+
+      // Stok disimpan PER CABANG (product_branch_stock), bukan lagi di tabel
+      // products — supaya cabang lain tidak ikut berubah stoknya.
+      if (activeBranch) {
+        await supabase.from("product_branch_stock").upsert(
+          {
+            product_id: productId,
+            branch_id: activeBranch,
+            stock_qty: Number(form.stock_qty) || 0,
+            min_stock: Number(form.min_stock) || 0,
+          },
+          { onConflict: "product_id,branch_id" }
+        );
       }
 
       if (form.unit_type === "unit" && (form.wholesale_qty || form.half_wholesale_qty)) {
@@ -245,6 +265,12 @@ export default function ProdukPage() {
         {isMobile && <CameraScanButton onDetected={(code) => setSearch(code)} title="Cari produk pakai kamera" />}
       </div>
 
+      {branches.length > 1 && (
+        <Select label="Menampilkan & mengedit stok untuk cabang" value={activeBranch} onChange={(e) => setActiveBranch(e.target.value)} className="max-w-xs">
+          {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </Select>
+      )}
+
       <Card>
         {loading ? (
           <p className="text-sm text-ink-muted">Memuat...</p>
@@ -264,14 +290,16 @@ export default function ProdukPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
+                {filtered.map((p) => {
+                  const branchStock = getBranchStock(p, activeBranch);
+                  return (
                   <tr key={p.id} className="border-b border-border last:border-0">
                     <td className="py-2.5 pr-3">{p.name}</td>
                     <td className="py-2.5 pr-3 text-ink-muted">{p.unit_type === "kg" ? "Timbangan" : "PCS"}</td>
                     <td className="py-2.5 pr-3 text-right">{formatRupiah(p.sell_price)}{p.unit_type === "kg" ? "/kg" : ""}</td>
                     <td className="py-2.5 pr-3 text-right">
-                      {formatNumber(p.stock_qty, 2)}
-                      {Number(p.stock_qty) <= Number(p.min_stock) && (
+                      {formatNumber(branchStock.stock_qty, 2)}
+                      {branchStock.stock_qty <= branchStock.min_stock && (
                         <Badge tone="danger" className="ml-2">Menipis</Badge>
                       )}
                     </td>
@@ -283,7 +311,8 @@ export default function ProdukPage() {
                       <Button variant="danger" onClick={() => handleDelete(p.id)}>Hapus</Button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -331,11 +360,16 @@ export default function ProdukPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Input label="Stok Saat Ini" type="number" value={form.stock_qty} onChange={(e) => setForm({ ...form, stock_qty: e.target.value })} />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Input
+                label={`Stok Saat Ini${branches.length > 1 ? ` — ${branches.find((b) => b.id === activeBranch)?.name || ""}` : ""}`}
+                type="number"
+                value={form.stock_qty}
+                onChange={(e) => setForm({ ...form, stock_qty: e.target.value })}
+              />
               <Input label="Stok Minimum (peringatan menipis)" type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} />
               <Input
-                label="Pajak/PPN (%) — kosongkan/0 kalau tidak kena pajak"
+                label="Pajak/PPN (%) — kosongkan/0 jika tidak kena pajak"
                 type="number"
                 value={form.tax_rate}
                 onChange={(e) => setForm({ ...form, tax_rate: e.target.value })}

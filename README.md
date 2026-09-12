@@ -146,14 +146,16 @@ git push -u origin main
   default: cek stok ±08:00 WIB, laporan harian ±21:00 WIB (bisa diubah di
   `vercel.json` kalau perlu jam lain — paket Vercel gratis membatasi jadwal cron
   jadi maksimal sekali per hari per cron).
-- **Multi-Cabang — TAHAP 1**: sudah bisa membuat beberapa cabang (menu **Cabang**),
-  menugaskan kasir ke satu cabang (menu **Pengguna**), dan memfilter Dashboard &
-  Cek Transaksi Penjualan per cabang. **Stok barang masih satu database bersama**
-  untuk semua cabang (belum dipisah per cabang) — itu perubahan besar tersendiri
-  yang menyentuh alur kasir/pembelian/retur/opname, sengaja belum dikerjakan
-  sekaligus supaya tidak berisiko merusak data stok yang sudah berjalan. Kalau
-  nanti memang perlu stok terpisah per cabang, itu dikerjakan sebagai proyek
-  tersendiri (Tahap 2).
+- **Multi-Cabang**: stok barang sudah dipisah PER CABANG (tabel `product_branch_stock`,
+  migrasi #12). Halaman **Produk & Harga** punya pemilih cabang untuk melihat/mengedit
+  stok cabang tertentu; halaman **Pembelian** & **Retur** juga meminta pilih cabang
+  supaya stok masuk/keluar ke cabang yang benar. Kasir yang sudah ditugaskan ke satu
+  cabang otomatis memakai stok cabang itu; kalau akun (biasanya admin) belum
+  ditugaskan ke cabang manapun dan ada lebih dari 1 cabang aktif, layar kasir akan
+  minta pilih cabang dulu sebelum transaksi bisa dimulai.
+  Kolom `products.stock_qty`/`min_stock` lama TIDAK dihapus (untuk jaga-jaga), tapi
+  aplikasi sudah tidak memakainya lagi — sumber kebenaran stok sekarang
+  `product_branch_stock`.
 - **Scanner global**: scanner fisik dan HP (via QR) aktif di semua halaman utama yang
   ada kolom cari/pilih barang — bukan cuma di Kasir.
 - **Suara nama barang**: memakai fitur bawaan browser (Web Speech API), gratis tanpa

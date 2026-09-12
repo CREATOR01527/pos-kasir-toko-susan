@@ -88,7 +88,10 @@ export default function DashboardPage() {
           .from("transaction_items")
           .select("product_id, qty, subtotal, cost_price_snapshot, products(name)")
           .gte("created_at", monthStart),
-        supabase.from("products").select("id, name, stock_qty, min_stock").eq("active", true),
+        (branchFilter
+          ? supabase.from("product_branch_stock").select("stock_qty, min_stock, products(name), branches(name)").eq("branch_id", branchFilter)
+          : supabase.from("product_branch_stock").select("stock_qty, min_stock, products(name), branches(name)")
+        ),
         withBranch(
           supabase
             .from("transactions")
@@ -124,7 +127,16 @@ export default function DashboardPage() {
 
     setTodayTx(tToday || []);
     setMonthTx(tMonth || []);
-    setLowStock((products || []).filter((p) => Number(p.stock_qty) <= Number(p.min_stock)));
+    setLowStock(
+      (products || [])
+        .filter((row) => Number(row.stock_qty) <= Number(row.min_stock) && Number(row.min_stock) > 0)
+        .map((row) => ({
+          name: row.products?.name || "(barang tidak dikenal)",
+          branchName: row.branches?.name,
+          stock_qty: row.stock_qty,
+          min_stock: row.min_stock,
+        }))
+    );
     setRecent(recentTx || []);
 
     const map = new Map();
@@ -441,10 +453,13 @@ export default function DashboardPage() {
       {lowStock.length > 0 && (
         <Card title="Barang Perlu Restock">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {lowStock.map((p) => (
-              <div key={p.id} className="border border-danger/30 bg-danger-soft rounded-lg p-3">
+            {lowStock.map((p, idx) => (
+              <div key={idx} className="border border-danger/30 bg-danger-soft rounded-lg p-3">
                 <p className="text-sm font-medium truncate">{p.name}</p>
-                <p className="text-xs text-danger">Sisa {formatNumber(p.stock_qty, 2)} (min {formatNumber(p.min_stock, 2)})</p>
+                <p className="text-xs text-danger">
+                  Sisa {formatNumber(p.stock_qty, 2)} (min {formatNumber(p.min_stock, 2)})
+                  {p.branchName && branches.length > 1 ? ` — ${p.branchName}` : ""}
+                </p>
               </div>
             ))}
           </div>

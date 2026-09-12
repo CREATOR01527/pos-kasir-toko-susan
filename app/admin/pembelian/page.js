@@ -10,6 +10,7 @@ import { useBarcodeScan } from "@/lib/useBarcodeScan";
 import { useViewport } from "@/lib/useViewport";
 import CameraScanButton from "@/components/CameraScanButton";
 import { findProductByCode } from "@/lib/barcode";
+import { getBranchStock } from "@/lib/branchStock";
 
 // Susunan kolom tingkatan harga per tipe produk, lengkap dengan modal & harga jual
 // yang sudah ada di data produk (jadi tidak perlu diketik ulang, cukup lihat sebagai
@@ -59,8 +60,9 @@ export default function PembelianPage() {
   const [payMethod, setPayMethod] = useState("cash");
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({ supplier_id: "", nota_number: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
+  const [form, setForm] = useState({ supplier_id: "", branch_id: "", nota_number: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
   const [items, setItems] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [draftProductId, setDraftProductId] = useState("");
   const { isMobile } = useViewport();
   const [draftTiers, setDraftTiers] = useState({}); // { [price_type]: { qty, newCost, newSell } }
@@ -90,20 +92,23 @@ export default function PembelianPage() {
 
   async function load() {
     setLoading(true);
-    const [{ data: o }, { data: s }, { data: p }] = await Promise.all([
-      supabase.from("purchase_orders").select("*, suppliers(name), purchase_order_items(*, products(name))").order("created_at", { ascending: false }),
+    const [{ data: o }, { data: s }, { data: p }, { data: b }] = await Promise.all([
+      supabase.from("purchase_orders").select("*, suppliers(name), branches(name), purchase_order_items(*, products(name))").order("created_at", { ascending: false }),
       supabase.from("suppliers").select("id, name").eq("active", true).order("name"),
       supabase
         .from("products")
         .select(
-          "id, name, unit_type, stock_qty, cost_price, sell_price, sku, product_barcodes(barcode), product_wholesale_pricing(*), product_kg_pricing(*)"
+          "id, name, unit_type, cost_price, sell_price, sku, product_barcodes(barcode), product_wholesale_pricing(*), product_kg_pricing(*), product_branch_stock(*)"
         )
         .eq("active", true)
         .order("name"),
+      supabase.from("branches").select("*").eq("active", true).order("created_at", { ascending: true }),
     ]);
     setOrders(o || []);
     setSuppliers(s || []);
     setProducts(p || []);
+    setBranches(b || []);
+    setForm((f) => ({ ...f, branch_id: f.branch_id || b?.[0]?.id || "" }));
     setLoading(false);
   }
 
@@ -153,6 +158,7 @@ export default function PembelianPage() {
 
   async function submitOrder() {
     if (!form.supplier_id || items.length === 0) return toast.error("Pilih supplier dan tambahkan minimal 1 barang");
+    if (branches.length > 1 && !form.branch_id) return toast.error("Pilih cabang tujuan barang ini");
     if ((Number(form.down_payment) || 0) > total) {
       return toast.error("Uang muka tidak boleh lebih besar dari total pesanan");
     }
@@ -163,6 +169,7 @@ export default function PembelianPage() {
         .from("purchase_orders")
         .insert({
           supplier_id: form.supplier_id,
+          branch_id: form.branch_id || branches[0]?.id || null,
           nota_number: form.nota_number || null,
           due_date: form.due_date || null,
           notes: form.notes || null,
@@ -208,7 +215,7 @@ export default function PembelianPage() {
 
       toast.success("Pesanan pembelian dibuat");
       setModalOpen(false);
-      setForm({ supplier_id: "", nota_number: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
+      setForm({ supplier_id: "", branch_id: form.branch_id, nota_number: "", due_date: "", notes: "", discount: "0", down_payment: "0", down_payment_method: "cash" });
       setItems([]);
       setCorrectionOpen(false);
       setCorrectionForm({ itemIndex: "", qty: "", reason: "", linkSupplierReturn: false });
@@ -258,14 +265,16 @@ export default function PembelianPage() {
     setSaving(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
+      const branchId = order.branch_id || branches[0]?.id || null;
       for (const item of order.purchase_order_items) {
         const product = products.find((p) => p.id === item.product_id);
         if (!product) continue;
         const tier = tiersForProduct(product).find((t) => t.price_type === item.price_type);
         const stockIncrement = Number(item.qty) * (tier?.stockFactor || 1);
-        const newStock = Number(product.stock_qty || 0) + stockIncrement;
+        const branchStock = getBranchStock(product, branchId);
+        const newStock = branchStock.stock_qty + stockIncrement;
 
-        const productPatch = { stock_qty: newStock };
+        const productPatch = {};
         const w = product.product_wholesale_pricing?.[0] || product.product_wholesale_pricing || {};
         const k = product.product_kg_pricing?.[0] || product.product_kg_pricing || {};
         const newSell = item.new_sell_price;
@@ -307,9 +316,16 @@ export default function PembelianPage() {
           });
         }
 
-        await supabase.from("products").update(productPatch).eq("id", item.product_id);
+        if (Object.keys(productPatch).length > 0) {
+          await supabase.from("products").update(productPatch).eq("id", item.product_id);
+        }
+        await supabase.from("product_branch_stock").upsert(
+          { product_id: item.product_id, branch_id: branchId, stock_qty: newStock, min_stock: branchStock.min_stock },
+          { onConflict: "product_id,branch_id" }
+        );
         await supabase.from("stock_movements").insert({
           product_id: item.product_id,
+          branch_id: branchId,
           movement_type: "pembelian",
           qty: stockIncrement,
           unit_cost: item.unit_cost,
@@ -460,6 +476,11 @@ export default function PembelianPage() {
           </div>
           <div className="grid sm:grid-cols-2 gap-3 mb-3">
             <Input label="Jatuh Tempo" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} />
+            {branches.length > 1 && (
+              <Select label="Cabang Tujuan" value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })}>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </Select>
+            )}
           </div>
           <Textarea label="Catatan" placeholder="Kirim minggu depan, faktur menyusul" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="mb-4" />
 

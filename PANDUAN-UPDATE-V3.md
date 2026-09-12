@@ -5,6 +5,11 @@
 1. `supabase/migration-09-pajak.sql`
 2. `supabase/migration-10-notifikasi.sql`
 3. `supabase/migration-11-cabang.sql`
+4. `supabase/migration-12-cabang-stok.sql` — memisah STOK barang per cabang.
+   **Baca catatan di dalam file ini sebelum menjalankan**: stok lama dipindah
+   seluruhnya ke Cabang Utama; kalau Anda sudah sempat membuat cabang lain
+   sebelum migrasi ini, cabang itu mulai dari stok 0 dan perlu disesuaikan
+   manual di halaman Produk & Harga (pilih cabangnya, lalu edit stok tiap barang).
 
 (Kalau sebelumnya migration-08-pengaturan-struk.sql belum pernah dijalankan —
 itu penyebab error "Could not find receipt_show_address column" — jalankan itu

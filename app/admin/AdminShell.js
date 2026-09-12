@@ -80,10 +80,11 @@ export default function AdminShell({ profile, settings, children }) {
   useEffect(() => {
     async function loadLowStock() {
       const { data } = await supabase
-        .from("products")
-        .select("id, name, stock_qty, min_stock")
-        .eq("active", true);
-      const low = (data || []).filter((p) => Number(p.stock_qty) <= Number(p.min_stock));
+        .from("product_branch_stock")
+        .select("stock_qty, min_stock, products(name), branches(name)");
+      const low = (data || [])
+        .filter((row) => Number(row.stock_qty) <= Number(row.min_stock) && Number(row.min_stock) > 0)
+        .map((row) => ({ name: row.products?.name || "(barang)", branchName: row.branches?.name, stock_qty: row.stock_qty }));
       setLowStockItems(low);
       setLowStockCount(low.length);
     }
@@ -91,7 +92,7 @@ export default function AdminShell({ profile, settings, children }) {
 
     const channel = supabase
       .channel("admin-notifications")
-      .on("postgres_changes", { event: "*", schema: "public", table: "products" }, loadLowStock)
+      .on("postgres_changes", { event: "*", schema: "public", table: "product_branch_stock" }, loadLowStock)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "transactions" }, (payload) => {
         const tx = payload.new;
         if (tx?.status === "completed") {
@@ -223,10 +224,10 @@ export default function AdminShell({ profile, settings, children }) {
                 <p className="text-xs font-medium mb-2">Stok Menipis</p>
                 {lowStockItems.length === 0 && <p className="text-xs text-ink-muted">Semua stok aman.</p>}
                 <div className="space-y-1 max-h-64 overflow-auto">
-                  {lowStockItems.map((p) => (
-                    <div key={p.id} className="flex justify-between text-xs py-1">
-                      <span className="truncate">{p.name}</span>
-                      <span className="text-danger font-medium">{p.stock_qty}</span>
+                  {lowStockItems.map((p, idx) => (
+                    <div key={idx} className="flex justify-between text-xs py-1 gap-2">
+                      <span className="truncate">{p.name}{p.branchName ? ` (${p.branchName})` : ""}</span>
+                      <span className="text-danger font-medium shrink-0">{p.stock_qty}</span>
                     </div>
                   ))}
                 </div>

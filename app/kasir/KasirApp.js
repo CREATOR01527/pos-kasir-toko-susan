@@ -14,6 +14,7 @@ import ScannerStatusWidget from "@/components/ScannerStatusWidget";
 import { useViewport } from "@/lib/useViewport";
 import { speakProductName, isVoiceEnabled, setVoiceEnabled } from "@/lib/voice";
 import { normalizeBarcode, findProductByCode } from "@/lib/barcode";
+import { getBranchStock } from "@/lib/branchStock";
 
 import OpeningCashModal from "./components/OpeningCashModal";
 import CloseShiftModal from "./components/CloseShiftModal";
@@ -23,11 +24,19 @@ import PaymentModal from "./components/PaymentModal";
 import PendingListModal from "./components/PendingListModal";
 import CameraScannerModal from "./components/CameraScannerModal";
 import ReceiptModal from "./components/ReceiptModal";
-import { Volume2, VolumeX, Search, Hash, PauseCircle, RotateCcw, CreditCard, PackageOpen, Menu, X, ScanLine, Trash2 } from "lucide-react";
+import { Volume2, VolumeX, Search, Hash, PauseCircle, RotateCcw, CreditCard, PackageOpen, Menu, X, ScanLine, Trash2, Building2 } from "lucide-react";
 
-export default function KasirApp({ profile, isAdminAccount, impersonating, initialShift, products, customers, settings, pendingTransactions }) {
+export default function KasirApp({ profile, isAdminAccount, impersonating, initialShift, products, customers, settings, pendingTransactions, branches, resolvedBranchId }) {
   const supabase = createClient();
   const router = useRouter();
+
+  // Cabang aktif untuk sesi kasir ini (menentukan stok mana yang dipakai &
+  // milik cabang mana transaksi ini tercatat). Kalau belum jelas (>1 cabang
+  // aktif dan akun ini belum ditugaskan ke satu cabang tertentu), kasir
+  // diminta memilih dulu lewat layar penuh sebelum bisa mulai transaksi.
+  const [sessionBranchId, setSessionBranchId] = useState(resolvedBranchId || null);
+  const needsBranchPicker = !sessionBranchId && (branches || []).length > 0;
+  const activeBranchName = (branches || []).find((b) => b.id === sessionBranchId)?.name;
 
   const DEFAULT_HOTKEYS = { search: "F2", qty: "F4", hold: "F7", recall: "F8", pay: "F12", drawer: "F6" };
   const hotkeys = { ...DEFAULT_HOTKEYS, ...(settings?.action_hotkeys || {}) };
@@ -354,7 +363,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         .insert({
           shift_id: shift.id,
           cashier_id: profile.id,
-          branch_id: profile.branch_id || null,
+          branch_id: sessionBranchId,
           customer_id: customerId || null,
           subtotal: totals.subtotal,
           discount: totals.discount,
@@ -444,8 +453,9 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
     for (const i of cart) {
       const product = products.find((p) => p.id === i.product_id);
       const qtyOut = i.qty * i.stock_factor;
-      if (product && qtyOut > Number(product.stock_qty)) {
-        insufficient.push(`${product.name} (stok ${formatNumber(product.stock_qty, 2)}, diminta ${formatNumber(qtyOut, 2)})`);
+      const branchStock = getBranchStock(product, sessionBranchId);
+      if (product && qtyOut > branchStock.stock_qty) {
+        insufficient.push(`${product.name} (stok ${formatNumber(branchStock.stock_qty, 2)}, diminta ${formatNumber(qtyOut, 2)})`);
       }
     }
     if (insufficient.length > 0) {
@@ -477,7 +487,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         .insert({
           shift_id: shift.id,
           cashier_id: profile.id,
-          branch_id: profile.branch_id || null,
+          branch_id: sessionBranchId,
           customer_id: customerId || null,
           subtotal: totals.subtotal,
           discount: totals.discount,
@@ -513,26 +523,29 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
       const { error: itemErr } = await supabase.from("transaction_items").insert(items);
       if (itemErr) throw itemErr;
 
-      // kurangi stok + catat pergerakan stok
+      // kurangi stok cabang ini + catat pergerakan stok
       let anyLowStock = false;
       for (const i of cart) {
         const product = products.find((p) => p.id === i.product_id);
         const qtyOut = i.qty * i.stock_factor;
-        const newStock = Math.max(0, Number(product?.stock_qty || 0) - qtyOut);
+        const branchStock = getBranchStock(product, sessionBranchId);
+        const newStock = Math.max(0, branchStock.stock_qty - qtyOut);
         await supabase
-          .from("products")
-          .update({ stock_qty: newStock })
-          .eq("id", i.product_id);
+          .from("product_branch_stock")
+          .upsert({ product_id: i.product_id, branch_id: sessionBranchId, stock_qty: newStock, min_stock: branchStock.min_stock }, { onConflict: "product_id,branch_id" });
         await supabase.from("stock_movements").insert({
           product_id: i.product_id,
+          branch_id: sessionBranchId,
           movement_type: "penjualan",
           qty: -qtyOut,
           note: `Transaksi ${tx.id}`,
           created_by: profile.id,
         });
         if (product) {
-          product.stock_qty = newStock;
-          if (Number(product.min_stock) > 0 && newStock <= Number(product.min_stock)) anyLowStock = true;
+          const row = (product.product_branch_stock || []).find((s) => s.branch_id === sessionBranchId);
+          if (row) row.stock_qty = newStock;
+          else product.product_branch_stock = [...(product.product_branch_stock || []), { branch_id: sessionBranchId, stock_qty: newStock, min_stock: branchStock.min_stock }];
+          if (branchStock.min_stock > 0 && newStock <= branchStock.min_stock) anyLowStock = true;
         }
       }
 
@@ -595,6 +608,32 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
     router.refresh();
   }
 
+  if (needsBranchPicker) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background p-4">
+        <div className="w-full max-w-sm bg-surface border border-border rounded-2xl p-6 text-center">
+          <Building2 className="mx-auto mb-3 text-primary" size={32} />
+          <h2 className="text-base font-semibold mb-1">Pilih Cabang</h2>
+          <p className="text-sm text-ink-muted mb-4">
+            Akun ini belum ditugaskan ke satu cabang tertentu. Pilih cabang untuk sesi kasir ini —
+            stok & transaksi akan tercatat milik cabang yang dipilih.
+          </p>
+          <div className="space-y-2">
+            {branches.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => setSessionBranchId(b.id)}
+                className="w-full rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:border-primary hover:bg-primary-soft"
+              >
+                {b.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!shift) {
     return <OpeningCashModal amount={profile.default_opening_cash} onConfirm={handleOpenShift} loading={openingLoading} />;
   }
@@ -607,6 +646,9 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
           <div className="p-4 border-b border-border">
             <p className="text-sm font-semibold truncate">{settings?.store_name || "Toko"}</p>
             <p className="text-xs text-ink-muted truncate">{profile.full_name}</p>
+            {(branches || []).length > 1 && activeBranchName && (
+              <p className="text-[11px] text-primary truncate mt-0.5">Cabang: {activeBranchName}</p>
+            )}
             {impersonating && <p className="text-[10px] text-primary mt-0.5">Dibuka oleh admin</p>}
             <div className="flex items-center gap-1.5 mt-2">
               <span className={`h-2 w-2 rounded-full ${physicalActive || phoneConnected ? "bg-primary" : "bg-danger"}`} />
@@ -795,14 +837,15 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             <span className="text-xs text-ink-muted truncate ml-auto">{profile.full_name}</span>
           </div>
         )}
-        <div className="p-4 border-b border-border bg-surface flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="flex-1 flex items-center gap-2">
+        <div className="p-4 border-b border-border bg-surface flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative">
+          <div className="flex-1 flex items-center gap-2 relative">
             <input
               ref={searchRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && searchResults[0]) handlePickProduct(searchResults[0]);
+                if (e.key === "Escape") setSearch("");
               }}
               placeholder={`Cari nama barang... (${hotkeys.search})`}
               className="flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
@@ -815,6 +858,24 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
               >
                 <ScanLine size={18} />
               </button>
+            )}
+
+            {/* Tablet & desktop: daftar hasil pencarian tampil menurun (dropdown list)
+                tepat di bawah kolom pencarian, supaya nama & harga barang kebaca penuh
+                tanpa perlu geser ke samping seperti versi chip sebelumnya. */}
+            {!isMobile && searchResults.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 z-20 bg-surface border border-border rounded-lg shadow-lg max-h-80 overflow-y-auto">
+                {searchResults.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => handlePickProduct(p)}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm border-b border-border last:border-b-0 hover:bg-primary-soft text-left"
+                  >
+                    <span className="font-medium truncate">{p.name}</span>
+                    <span className="text-ink-muted shrink-0">{formatRupiah(p.sell_price)}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
           <select
@@ -831,36 +892,21 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
           </select>
         </div>
 
-        {searchResults.length > 0 && (
-          isMobile ? (
-            // Versi HP: daftar hasil pencarian ditampilkan menurun (list ke bawah),
-            // supaya nama & harga barang kebaca penuh tanpa geser ke samping.
-            <div className="border-b border-border bg-surface max-h-64 overflow-y-auto">
-              {searchResults.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handlePickProduct(p)}
-                  className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm border-b border-border last:border-b-0 hover:bg-primary-soft active:bg-primary-soft text-left"
-                >
-                  <span className="font-medium truncate">{p.name}</span>
-                  <span className="text-ink-muted shrink-0">{formatRupiah(p.sell_price)}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="border-b border-border bg-surface px-4 py-2 flex gap-2 overflow-x-auto">
-              {searchResults.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handlePickProduct(p)}
-                  className="shrink-0 rounded-lg border border-border px-3 py-2 text-xs hover:border-primary hover:bg-primary-soft"
-                >
-                  <span className="font-medium">{p.name}</span>
-                  <span className="text-ink-muted ml-1.5">{formatRupiah(p.sell_price)}</span>
-                </button>
-              ))}
-            </div>
-          )
+        {isMobile && searchResults.length > 0 && (
+          // Versi HP: daftar hasil pencarian ditampilkan menurun (list ke bawah) di
+          // bawah seluruh baris pencarian, supaya nama & harga barang kebaca penuh.
+          <div className="border-b border-border bg-surface max-h-64 overflow-y-auto">
+            {searchResults.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => handlePickProduct(p)}
+                className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm border-b border-border last:border-b-0 hover:bg-primary-soft active:bg-primary-soft text-left"
+              >
+                <span className="font-medium truncate">{p.name}</span>
+                <span className="text-ink-muted shrink-0">{formatRupiah(p.sell_price)}</span>
+              </button>
+            ))}
+          </div>
         )}
 
         {isMobile ? (
