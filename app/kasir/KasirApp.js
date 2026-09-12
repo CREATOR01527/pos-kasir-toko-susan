@@ -87,6 +87,8 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
       .slice(0, 8);
   }, [search, products]);
 
+  const taxInclusive = !!settings?.tax_price_inclusive;
+
   const totals = useMemo(() => {
     const subtotal = cart.reduce((s, i) => s + i.unit_price * i.qty, 0);
     const discountPercent = customer?.discount_percent || 0;
@@ -94,9 +96,22 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
     const manualDiscountAmount = Math.max(0, parseFloat(manualDiscount) || 0);
     const discount = percentDiscount + manualDiscountAmount;
     const delivery = parseFloat(deliveryFee) || 0;
-    const total = Math.max(0, subtotal - discount + delivery);
-    return { subtotal, discount, percentDiscount, manualDiscountAmount, delivery, total };
-  }, [cart, customer, deliveryFee, manualDiscount]);
+
+    // Pajak dihitung per item dari tax_rate produk masing-masing (0% = tidak
+    // kena pajak). Kalau "harga sudah termasuk pajak" aktif di Pengaturan,
+    // pajak cuma dipisah untuk tampilan struk (tidak menambah total bayar).
+    let tax = 0;
+    for (const i of cart) {
+      const rate = Number(i.tax_rate || 0);
+      if (rate <= 0) continue;
+      const lineTotal = i.unit_price * i.qty;
+      tax += taxInclusive ? lineTotal - lineTotal / (1 + rate / 100) : (lineTotal * rate) / 100;
+    }
+    tax = Math.round(tax);
+
+    const total = Math.max(0, subtotal - discount + delivery + (taxInclusive ? 0 : tax));
+    return { subtotal, discount, percentDiscount, manualDiscountAmount, delivery, tax, total };
+  }, [cart, customer, deliveryFee, manualDiscount, taxInclusive]);
 
   // ---------- Tambah item ke keranjang ----------
   const addToCart = useCallback((product, variant) => {
@@ -117,6 +132,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
           unit_price: variant.unit_price,
           stock_factor: variant.stock_factor,
           cost_price: Number(variant.cost_basis ?? product.cost_price ?? 0),
+          tax_rate: Number(product.tax_rate || 0),
           qty: 1,
         },
       ];
@@ -338,10 +354,12 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         .insert({
           shift_id: shift.id,
           cashier_id: profile.id,
+          branch_id: profile.branch_id || null,
           customer_id: customerId || null,
           subtotal: totals.subtotal,
           discount: totals.discount,
           delivery_fee: totals.delivery,
+          tax_amount: totals.tax,
           total: totals.total,
           status: "pending",
         })
@@ -356,6 +374,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         qty: i.qty,
         unit_price: i.unit_price,
         cost_price_snapshot: i.cost_price,
+        tax_rate: Number(i.tax_rate || 0),
         subtotal: i.unit_price * i.qty,
       }));
       const { error: itemErr } = await supabase.from("transaction_items").insert(items);
@@ -380,6 +399,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         unit_price: it.unit_price,
         stock_factor: getPriceVariants(product || {}).find((v) => v.price_type === it.price_type)?.stock_factor || 1,
         cost_price: it.cost_price_snapshot,
+        tax_rate: Number(it.tax_rate ?? product?.tax_rate ?? 0),
         qty: it.qty,
       };
     });
@@ -457,10 +477,12 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         .insert({
           shift_id: shift.id,
           cashier_id: profile.id,
+          branch_id: profile.branch_id || null,
           customer_id: customerId || null,
           subtotal: totals.subtotal,
           discount: totals.discount,
           delivery_fee: totals.delivery,
+          tax_amount: totals.tax,
           total: totals.total,
           payment_method: method,
           paid_amount: paid,
@@ -472,25 +494,34 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         .single();
       if (error) throw error;
 
-      const items = cart.map((i) => ({
-        transaction_id: tx.id,
-        product_id: i.product_id,
-        price_type: i.price_type,
-        qty: i.qty,
-        unit_price: i.unit_price,
-        cost_price_snapshot: i.cost_price,
-        subtotal: i.unit_price * i.qty,
-      }));
+      const items = cart.map((i) => {
+        const lineTotal = i.unit_price * i.qty;
+        const rate = Number(i.tax_rate || 0);
+        const lineTax = rate > 0 ? Math.round(taxInclusive ? lineTotal - lineTotal / (1 + rate / 100) : (lineTotal * rate) / 100) : 0;
+        return {
+          transaction_id: tx.id,
+          product_id: i.product_id,
+          price_type: i.price_type,
+          qty: i.qty,
+          unit_price: i.unit_price,
+          cost_price_snapshot: i.cost_price,
+          tax_rate: rate,
+          tax_amount: lineTax,
+          subtotal: lineTotal,
+        };
+      });
       const { error: itemErr } = await supabase.from("transaction_items").insert(items);
       if (itemErr) throw itemErr;
 
       // kurangi stok + catat pergerakan stok
+      let anyLowStock = false;
       for (const i of cart) {
         const product = products.find((p) => p.id === i.product_id);
         const qtyOut = i.qty * i.stock_factor;
+        const newStock = Math.max(0, Number(product?.stock_qty || 0) - qtyOut);
         await supabase
           .from("products")
-          .update({ stock_qty: Math.max(0, Number(product?.stock_qty || 0) - qtyOut) })
+          .update({ stock_qty: newStock })
           .eq("id", i.product_id);
         await supabase.from("stock_movements").insert({
           product_id: i.product_id,
@@ -499,7 +530,17 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
           note: `Transaksi ${tx.id}`,
           created_by: profile.id,
         });
-        if (product) product.stock_qty = Math.max(0, Number(product.stock_qty || 0) - qtyOut);
+        if (product) {
+          product.stock_qty = newStock;
+          if (Number(product.min_stock) > 0 && newStock <= Number(product.min_stock)) anyLowStock = true;
+        }
+      }
+
+      // Notifikasi stok menipis dikirim di background (tidak menunggu/menghambat
+      // struk tampil ke kasir); server yang menentukan barang mana saja yang
+      // benar-benar perlu dikirim & anti-spam-nya, ini cuma pemicu.
+      if (anyLowStock) {
+        fetch("/api/notify/low-stock", { method: "POST" }).catch(() => {});
       }
 
       if (method === "kasbon" && customerId) {
@@ -524,6 +565,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         items: cart.map((i) => ({ name: i.name, price_type: i.price_type, qty: i.qty, unit_price: i.unit_price })),
         cashierName: profile.full_name,
         customerName: customer?.name || null,
+        customerPhone: customer?.phone || null,
       };
       setLastReceipt(receiptData);
       setReceiptModalOpen(true);
@@ -957,6 +999,11 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             <div className="hidden sm:block flex-1" />
             <div className="text-right ml-auto sm:ml-0">
               {totals.discount > 0 && <p className="text-xs text-danger">Diskon -{formatRupiah(totals.discount)}</p>}
+              {totals.tax > 0 && (
+                <p className="text-xs text-ink-muted">
+                  {settings?.tax_label || "PPN"} {taxInclusive ? "(termasuk harga)" : ""} {taxInclusive ? "" : `+${formatRupiah(totals.tax)}`}
+                </p>
+              )}
               <p className="text-xs text-ink-muted">Total</p>
               <p className="text-lg sm:text-xl font-semibold">{formatRupiah(totals.total)}</p>
             </div>

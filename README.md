@@ -133,6 +133,27 @@ git push -u origin main
   bisa manual (klik "Jalankan Sekarang") atau otomatis sesuai jadwal (dijalankan lewat
   Vercel Cron setiap hari, hanya benar-benar memproses saat jadwalnya sudah waktunya).
   Data yang diarsipkan **tidak dihapus** dan tetap bisa dibuka di halaman yang sama.
+- **Pajak/PPN**: opsional PER PRODUK (0% = tidak kena pajak), diatur di menu
+  **Produk & Harga**. Label & cara hitung (ditambahkan di atas harga, atau harga
+  sudah termasuk pajak) diatur di **Pengaturan Toko**.
+- **Kirim struk WhatsApp**: pakai link `wa.me` bawaan (gratis, tanpa API berbayar).
+  Kalau pelanggan punya nomor HP tersimpan, terkirim langsung ke nomor itu; kalau
+  tidak, kasir tinggal pilih kontak dari WhatsApp di HP-nya sendiri.
+- **Notifikasi otomatis**: stok menipis & ringkasan penjualan harian dikirim ke
+  **Telegram** (bukan WhatsApp API, karena WhatsApp Business API perlu verifikasi
+  bisnis berbayar). Diatur di **Pengaturan Toko** > Notifikasi Otomatis — isi Bot
+  Token & Chat ID, aktifkan togglenya, lalu jalankan migrasi #10. Jadwal cron
+  default: cek stok ±08:00 WIB, laporan harian ±21:00 WIB (bisa diubah di
+  `vercel.json` kalau perlu jam lain — paket Vercel gratis membatasi jadwal cron
+  jadi maksimal sekali per hari per cron).
+- **Multi-Cabang — TAHAP 1**: sudah bisa membuat beberapa cabang (menu **Cabang**),
+  menugaskan kasir ke satu cabang (menu **Pengguna**), dan memfilter Dashboard &
+  Cek Transaksi Penjualan per cabang. **Stok barang masih satu database bersama**
+  untuk semua cabang (belum dipisah per cabang) — itu perubahan besar tersendiri
+  yang menyentuh alur kasir/pembelian/retur/opname, sengaja belum dikerjakan
+  sekaligus supaya tidak berisiko merusak data stok yang sudah berjalan. Kalau
+  nanti memang perlu stok terpisah per cabang, itu dikerjakan sebagai proyek
+  tersendiri (Tahap 2).
 - **Scanner global**: scanner fisik dan HP (via QR) aktif di semua halaman utama yang
   ada kolom cari/pilih barang — bukan cuma di Kasir.
 - **Suara nama barang**: memakai fitur bawaan browser (Web Speech API), gratis tanpa

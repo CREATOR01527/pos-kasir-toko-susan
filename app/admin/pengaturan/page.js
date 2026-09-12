@@ -6,6 +6,41 @@ import { createClient } from "@/lib/supabase/client";
 import { Button, Card, Input, Select, Textarea, Toggle } from "@/components/ui/kit";
 import { LOGIN_FONTS, LOGIN_FONT_WEIGHTS } from "@/lib/loginFonts";
 
+function NotifTestButtons() {
+  const [loading, setLoading] = useState(null);
+
+  async function test(kind) {
+    setLoading(kind);
+    try {
+      const res = await fetch(`/api/notify/${kind}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ test: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal mengirim");
+      if (data.sent) toast.success(data.message || "Terkirim! Cek Telegram Anda.");
+      else toast(data.message || "Tidak ada yang dikirim");
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button variant="outline" onClick={() => test("low-stock")} disabled={loading !== null}>
+        {loading === "low-stock" ? "Mengirim..." : "Tes Kirim: Stok Menipis"}
+      </Button>
+      <Button variant="outline" onClick={() => test("daily-report")} disabled={loading !== null}>
+        {loading === "daily-report" ? "Mengirim..." : "Tes Kirim: Laporan Harian"}
+      </Button>
+      <p className="w-full text-xs text-ink-muted mt-1">Simpan pengaturan di atas dulu sebelum menekan tombol tes.</p>
+    </div>
+  );
+}
+
 export default function PengaturanPage() {
   const supabase = createClient();
   const [form, setForm] = useState(null);
@@ -112,6 +147,58 @@ export default function PengaturanPage() {
           className="mt-3"
           hint="Unggah gambar QRIS toko Anda ke penyimpanan gambar mana saja, lalu tempel link-nya di sini."
         />
+      </Card>
+
+      <Card title="Pajak / PPN">
+        <p className="text-xs text-ink-muted mb-3">
+          Tarif pajak diatur PER PRODUK di halaman Produk & Harga (0% = produk itu tidak kena pajak).
+          Di sini hanya mengatur label & cara hitungnya.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-3 mb-3">
+          <Input label="Label Pajak di Struk" placeholder="PPN" value={form.tax_label || ""} onChange={(e) => setForm({ ...form, tax_label: e.target.value })} />
+        </div>
+        <Toggle
+          checked={!!form.tax_price_inclusive}
+          onChange={(v) => setForm({ ...form, tax_price_inclusive: v })}
+          label="Harga jual sudah termasuk pajak (pajak cuma dipisah di struk, tidak menambah total bayar)"
+        />
+      </Card>
+
+      <Card title="Notifikasi Otomatis (Telegram)">
+        <p className="text-xs text-ink-muted mb-3">
+          Kirim notifikasi stok menipis & ringkasan penjualan harian otomatis ke Telegram (gratis, tanpa
+          verifikasi bisnis seperti WhatsApp Business API). Cara ambil Bot Token & Chat ID: chat{" "}
+          <span className="font-medium">@BotFather</span> di Telegram untuk buat bot & dapat token, lalu chat{" "}
+          <span className="font-medium">@userinfobot</span> untuk tahu Chat ID Anda (atau ID grup kalau notifikasi
+          mau masuk ke grup toko).
+        </p>
+        <div className="grid sm:grid-cols-2 gap-3 mb-3">
+          <Input
+            label="Telegram Bot Token"
+            placeholder="123456:ABC-DEF..."
+            value={form.telegram_bot_token || ""}
+            onChange={(e) => setForm({ ...form, telegram_bot_token: e.target.value })}
+          />
+          <Input
+            label="Telegram Chat ID"
+            placeholder="123456789"
+            value={form.telegram_chat_id || ""}
+            onChange={(e) => setForm({ ...form, telegram_chat_id: e.target.value })}
+          />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2 mb-4">
+          <Toggle
+            checked={!!form.notif_low_stock_enabled}
+            onChange={(v) => setForm({ ...form, notif_low_stock_enabled: v })}
+            label="Kirim notifikasi saat stok barang menipis"
+          />
+          <Toggle
+            checked={!!form.notif_daily_report_enabled}
+            onChange={(v) => setForm({ ...form, notif_daily_report_enabled: v })}
+            label="Kirim ringkasan penjualan tiap hari (±21:00 WIB)"
+          />
+        </div>
+        <NotifTestButtons />
       </Card>
 
       <Card title="Tema Aplikasi">

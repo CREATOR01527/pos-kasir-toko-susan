@@ -19,6 +19,7 @@ const emptyForm = {
   sell_price: "",
   stock_qty: "",
   min_stock: "",
+  tax_rate: "",
   active: true,
   wholesale_qty: "",
   wholesale_price: "",
@@ -98,6 +99,7 @@ export default function ProdukPage() {
       sell_price: p.sell_price,
       stock_qty: p.stock_qty,
       min_stock: p.min_stock,
+      tax_rate: p.tax_rate || "",
       active: p.active,
       wholesale_qty: w.wholesale_qty || "",
       wholesale_price: w.wholesale_price || "",
@@ -153,6 +155,7 @@ export default function ProdukPage() {
         sell_price: isKg ? Number(form.price_per_kg) || 0 : Number(form.sell_price) || 0,
         stock_qty: Number(form.stock_qty) || 0,
         min_stock: Number(form.min_stock) || 0,
+        tax_rate: Math.min(100, Math.max(0, Number(form.tax_rate) || 0)),
         active: form.active,
       };
 
@@ -331,6 +334,12 @@ export default function ProdukPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Input label="Stok Saat Ini" type="number" value={form.stock_qty} onChange={(e) => setForm({ ...form, stock_qty: e.target.value })} />
               <Input label="Stok Minimum (peringatan menipis)" type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} />
+              <Input
+                label="Pajak/PPN (%) — kosongkan/0 kalau tidak kena pajak"
+                type="number"
+                value={form.tax_rate}
+                onChange={(e) => setForm({ ...form, tax_rate: e.target.value })}
+              />
             </div>
 
             {form.unit_type === "unit" ? (

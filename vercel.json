@@ -3,6 +3,14 @@
     {
       "path": "/api/archive/run",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/notify/low-stock",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/notify/daily-report",
+      "schedule": "0 14 * * *"
     }
   ]
 }

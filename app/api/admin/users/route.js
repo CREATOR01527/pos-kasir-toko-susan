@@ -25,7 +25,7 @@ export async function POST(request) {
   if (!admin) return NextResponse.json({ error: "Tidak diizinkan" }, { status: 403 });
 
   const body = await request.json();
-  const { full_name, username, role, password, default_opening_cash } = body;
+  const { full_name, username, role, password, default_opening_cash, branch_id } = body;
 
   if (!full_name || !username || !password) {
     return NextResponse.json({ error: "Lengkapi semua data wajib" }, { status: 400 });
@@ -51,6 +51,7 @@ export async function POST(request) {
     role: role === "admin" ? "admin" : "kasir",
     active: true,
     default_opening_cash: Number(default_opening_cash) || 0,
+    branch_id: role === "admin" ? null : branch_id || null,
   });
 
   if (profileErr) {
@@ -67,7 +68,7 @@ export async function PATCH(request) {
   if (!admin) return NextResponse.json({ error: "Tidak diizinkan" }, { status: 403 });
 
   const body = await request.json();
-  const { id, full_name, role, active, default_opening_cash, password } = body;
+  const { id, full_name, role, active, default_opening_cash, password, branch_id } = body;
   if (!id) return NextResponse.json({ error: "ID pengguna wajib" }, { status: 400 });
 
   const service = getServiceClient();
@@ -77,6 +78,7 @@ export async function PATCH(request) {
   if (role !== undefined) patch.role = role;
   if (active !== undefined) patch.active = active;
   if (default_opening_cash !== undefined) patch.default_opening_cash = Number(default_opening_cash) || 0;
+  if (branch_id !== undefined) patch.branch_id = role === "admin" ? null : branch_id || null;
 
   if (Object.keys(patch).length > 0) {
     const { error } = await service.from("profiles").update(patch).eq("id", id);

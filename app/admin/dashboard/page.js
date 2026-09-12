@@ -34,6 +34,8 @@ export default function DashboardPage() {
   const [pendingReturns, setPendingReturns] = useState([]);
   const [exporting, setExporting] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [branches, setBranches] = useState([]);
+  const [branchFilter, setBranchFilter] = useState("");
 
   const [historyStart, setHistoryStart] = useState("");
   const [historyEnd, setHistoryEnd] = useState("");
@@ -42,6 +44,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load();
+    supabase.from("branches").select("*").eq("active", true).order("name").then(({ data }) => setBranches(data || []));
 
     // Realtime: begitu ada transaksi baru/berubah, grafik & angka-angka lain
     // langsung dimuat ulang tanpa perlu refresh halaman manual.
@@ -61,6 +64,10 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Muat ulang saat admin mengganti filter cabang.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [branchFilter]);
+
   async function load() {
     setLoading(true);
     const today = startOfDay(new Date()).toISOString();
@@ -69,26 +76,34 @@ export default function DashboardPage() {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
+    // Query transaksi ikut difilter cabang kalau admin memilih salah satu
+    // cabang di dropdown (kosong = semua cabang digabung, seperti sebelumnya).
+    const withBranch = (q) => (branchFilter ? q.eq("branch_id", branchFilter) : q);
+
     const [{ data: tToday }, { data: tMonth }, { data: items }, { data: products }, { data: recentTx }, { data: trend }, { data: todayItems }, { data: pos }, { data: payments }, { data: pendingRet }] =
       await Promise.all([
-        supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", today),
-        supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", monthStart),
+        withBranch(supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", today)),
+        withBranch(supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", monthStart)),
         supabase
           .from("transaction_items")
           .select("product_id, qty, subtotal, cost_price_snapshot, products(name)")
           .gte("created_at", monthStart),
         supabase.from("products").select("id, name, stock_qty, min_stock").eq("active", true),
-        supabase
-          .from("transactions")
-          .select("*, profiles(full_name)")
-          .eq("status", "completed")
-          .order("created_at", { ascending: false })
-          .limit(8),
-        supabase
-          .from("transactions")
-          .select("created_at, total")
-          .eq("status", "completed")
-          .gte("created_at", sevenDaysAgo.toISOString()),
+        withBranch(
+          supabase
+            .from("transactions")
+            .select("*, profiles(full_name)")
+            .eq("status", "completed")
+            .order("created_at", { ascending: false })
+            .limit(8)
+        ),
+        withBranch(
+          supabase
+            .from("transactions")
+            .select("created_at, total")
+            .eq("status", "completed")
+            .gte("created_at", sevenDaysAgo.toISOString())
+        ),
         supabase
           .from("transaction_items")
           .select("qty, subtotal, cost_price_snapshot")
@@ -192,9 +207,10 @@ export default function DashboardPage() {
       const rangeEnd = new Date(`${historyEnd}T23:59:59.999`).toISOString();
 
       const [{ data: txs }, { data: items }] = await Promise.all([
-        supabase
-          .from("transactions")
-          .select("*, profiles(full_name), customers(name)")
+        (branchFilter
+          ? supabase.from("transactions").select("*, profiles(full_name), customers(name)").eq("branch_id", branchFilter)
+          : supabase.from("transactions").select("*, profiles(full_name), customers(name)")
+        )
           .eq("status", "completed")
           .gte("created_at", rangeStart)
           .lte("created_at", rangeEnd)
@@ -259,9 +275,21 @@ export default function DashboardPage() {
           <h1 className="text-xl font-semibold">Dashboard</h1>
           <p className="text-sm text-ink-muted">Ringkasan performa toko secara langsung.</p>
         </div>
-        <Button variant="outline" onClick={handleExport} disabled={exporting}>
-          {exporting ? "Menyiapkan..." : "Ekspor Laporan (CSV)"}
-        </Button>
+        <div className="flex items-center gap-3">
+          {branches.length > 1 && (
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <option value="">Semua Cabang</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          )}
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            {exporting ? "Menyiapkan..." : "Ekspor Laporan (CSV)"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

@@ -24,6 +24,7 @@ import {
   Moon,
   Sun,
   Receipt,
+  Building2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useViewport } from "@/lib/useViewport";
@@ -45,6 +46,7 @@ const NAV = [
   { href: "/admin/pembelian", label: "Stok & Barang Masuk", icon: ShoppingCart },
   { href: "/admin/transaksi", label: "Cek Transaksi Penjualan", icon: Receipt },
   { href: "/admin/pelanggan", label: "Pelanggan", icon: Users },
+  { href: "/admin/cabang", label: "Cabang", icon: Building2 },
   { href: "/admin/log-aktivitas", label: "Log Aktivitas", icon: ScrollText },
   { href: "/admin/arsip", label: "Arsip Data", icon: Archive },
   { href: "/admin/pengguna", label: "Pengguna", icon: UserCog },

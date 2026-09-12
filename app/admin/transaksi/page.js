@@ -30,6 +30,8 @@ export default function CekTransaksiPage() {
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
+  const [branches, setBranches] = useState([]);
   const [codeSearch, setCodeSearch] = useState("");
 
   const [detailTx, setDetailTx] = useState(null);
@@ -38,6 +40,7 @@ export default function CekTransaksiPage() {
 
   useEffect(() => {
     load();
+    supabase.from("branches").select("*").eq("active", true).order("name").then(({ data }) => setBranches(data || []));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -52,6 +55,7 @@ export default function CekTransaksiPage() {
     if (dateStart) query = query.gte("created_at", new Date(`${dateStart}T00:00:00`).toISOString());
     if (dateEnd) query = query.lte("created_at", new Date(`${dateEnd}T23:59:59.999`).toISOString());
     if (statusFilter) query = query.eq("status", statusFilter);
+    if (branchFilter) query = query.eq("branch_id", branchFilter);
 
     const { data } = await query;
     setRows(data || []);
@@ -90,6 +94,12 @@ export default function CekTransaksiPage() {
             <option value="pending">Tertunda</option>
             <option value="void">Dibatalkan</option>
           </Select>
+          {branches.length > 1 && (
+            <Select label="Cabang" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
+              <option value="">Semua Cabang</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </Select>
+          )}
           <Button onClick={load} disabled={loading}>{loading ? "Memuat..." : "Terapkan Filter"}</Button>
         </div>
         <div className="mt-3">

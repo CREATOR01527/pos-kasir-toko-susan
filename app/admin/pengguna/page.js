@@ -6,11 +6,12 @@ import { createClient } from "@/lib/supabase/client";
 import { formatRupiah } from "@/lib/format";
 import { Button, Card, Input, Modal, Select, Toggle, EmptyState, Badge } from "@/components/ui/kit";
 
-const empty = { id: null, full_name: "", username: "", role: "kasir", password: "", default_opening_cash: "0", active: true };
+const empty = { id: null, full_name: "", username: "", role: "kasir", password: "", default_opening_cash: "0", active: true, branch_id: "" };
 
 export default function PenggunaPage() {
   const supabase = createClient();
   const [rows, setRows] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(empty);
@@ -18,6 +19,7 @@ export default function PenggunaPage() {
 
   useEffect(() => {
     load();
+    supabase.from("branches").select("*").eq("active", true).order("name").then(({ data }) => setBranches(data || []));
   }, []);
 
   async function load() {
@@ -37,8 +39,8 @@ export default function PenggunaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           form.id
-            ? { id: form.id, full_name: form.full_name, role: form.role, active: form.active, default_opening_cash: form.default_opening_cash, password: form.password || undefined }
-            : { full_name: form.full_name, username: form.username, role: form.role, password: form.password, default_opening_cash: form.default_opening_cash }
+            ? { id: form.id, full_name: form.full_name, role: form.role, active: form.active, default_opening_cash: form.default_opening_cash, branch_id: form.branch_id, password: form.password || undefined }
+            : { full_name: form.full_name, username: form.username, role: form.role, password: form.password, default_opening_cash: form.default_opening_cash, branch_id: form.branch_id }
         ),
       });
       const json = await res.json();
@@ -91,6 +93,7 @@ export default function PenggunaPage() {
                   <th className="text-left py-2 pr-3 font-medium">Nama</th>
                   <th className="text-left py-2 pr-3 font-medium">Username</th>
                   <th className="text-left py-2 pr-3 font-medium">Peran</th>
+                  <th className="text-left py-2 pr-3 font-medium">Cabang</th>
                   <th className="text-right py-2 pr-3 font-medium">Modal Awal</th>
                   <th className="text-left py-2 pr-3 font-medium">Status</th>
                   <th className="text-right py-2 font-medium">Aksi</th>
@@ -102,13 +105,14 @@ export default function PenggunaPage() {
                     <td className="py-2.5 pr-3">{u.full_name}</td>
                     <td className="py-2.5 pr-3 font-mono text-xs">{u.username}</td>
                     <td className="py-2.5 pr-3 capitalize">{u.role}</td>
+                    <td className="py-2.5 pr-3 text-ink-muted">{u.role === "admin" ? "Semua cabang" : branches.find((b) => b.id === u.branch_id)?.name || "-"}</td>
                     <td className="py-2.5 pr-3 text-right">{formatRupiah(u.default_opening_cash)}</td>
                     <td className="py-2.5 pr-3"><Badge tone={u.active ? "primary" : "default"}>{u.active ? "Aktif" : "Nonaktif"}</Badge></td>
                     <td className="py-2.5 text-right space-x-2">
                       <Button
                         variant="ghost"
                         onClick={() => {
-                          setForm({ id: u.id, full_name: u.full_name, username: u.username, role: u.role, password: "", default_opening_cash: String(u.default_opening_cash), active: u.active });
+                          setForm({ id: u.id, full_name: u.full_name, username: u.username, role: u.role, password: "", default_opening_cash: String(u.default_opening_cash), active: u.active, branch_id: u.branch_id || "" });
                           setModalOpen(true);
                         }}
                       >
@@ -140,6 +144,17 @@ export default function PenggunaPage() {
               <option value="kasir">Kasir — terbatas</option>
               <option value="admin">Admin — akses penuh</option>
             </Select>
+            {form.role === "kasir" && (
+              <Select
+                label="Cabang"
+                value={form.branch_id || ""}
+                onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
+                hint="Transaksi yang dibuat akun ini akan tercatat milik cabang ini."
+              >
+                <option value="">— Pilih cabang —</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </Select>
+            )}
             <Input
               label="Modal Awal (Rp)"
               type="number"

@@ -1,6 +1,7 @@
 "use client";
 
 import { formatRupiah, formatNumber, formatDateTime } from "@/lib/format";
+import { shareReceiptToWhatsApp } from "@/lib/shareReceipt";
 
 const PRICE_TYPE_LABELS = {
   grosir: "Grosir",
@@ -25,6 +26,9 @@ export default function ReceiptModal({ data, onPrint, onClose }) {
   rows.push({ label: "Subtotal", value: formatRupiah(tx.subtotal) });
   if (Number(tx.discount) > 0) rows.push({ label: "Diskon", value: `-${formatRupiah(tx.discount)}` });
   if (Number(tx.delivery_fee) > 0) rows.push({ label: "Biaya Antar", value: formatRupiah(tx.delivery_fee) });
+  if (Number(tx.tax_amount) > 0 && !store?.tax_price_inclusive) {
+    rows.push({ label: store?.tax_label || "PPN", value: `+${formatRupiah(tx.tax_amount)}` });
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
@@ -96,9 +100,15 @@ export default function ReceiptModal({ data, onPrint, onClose }) {
           )}
         </div>
 
-        <div className="p-4 border-t border-border flex gap-2">
+        <div className="p-4 border-t border-border flex gap-2 flex-wrap">
           <button onClick={onClose} className="flex-1 rounded-lg border border-border px-3 py-2.5 text-sm font-medium hover:bg-background">
             Tutup
+          </button>
+          <button
+            onClick={() => shareReceiptToWhatsApp(data)}
+            className="flex-1 rounded-lg border border-[#25D366] text-[#128C7E] px-3 py-2.5 text-sm font-medium hover:bg-[#25D366]/10"
+          >
+            Kirim WhatsApp
           </button>
           <button onClick={onPrint} className="flex-1 rounded-lg bg-primary text-white px-3 py-2.5 text-sm font-medium hover:bg-primary-hover">
             Cetak Struk
