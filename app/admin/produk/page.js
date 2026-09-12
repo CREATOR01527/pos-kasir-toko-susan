@@ -344,10 +344,10 @@ export default function ProdukPage() {
         <Modal title={form.id ? "Edit Produk" : form.unit_type === "kg" ? "Tambah Produk Timbang" : "Tambah Produk PCS"} onClose={() => setModalOpen(false)} wide>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Input label="Nama Produk" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Barcode Utama / SKU</label>
-                <div className="flex items-center gap-2">
+              <Input alignRow label="Nama Produk" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <div className="grid row-span-3 [grid-template-rows:subgrid]">
+                <label className="text-sm font-medium mb-1.5 leading-snug self-end">Barcode Utama / SKU</label>
+                <div className="flex items-center gap-2 self-start">
                   <input
                     value={form.sku}
                     onChange={(e) => setForm({ ...form, sku: e.target.value })}
@@ -356,19 +356,21 @@ export default function ProdukPage() {
                   />
                   {isMobile && <CameraScanButton onDetected={(code) => setForm((f) => ({ ...f, sku: code }))} title="Isi barcode pakai kamera" />}
                 </div>
-                <p className="text-xs text-ink-muted mt-1">Dicocokkan saat scan barcode di kasir.</p>
+                <p className="text-xs text-ink-muted mt-1 self-start">Dicocokkan saat scan barcode di kasir.</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <Input
+                alignRow
                 label={`Stok Saat Ini${branches.length > 1 ? ` — ${branches.find((b) => b.id === activeBranch)?.name || ""}` : ""}`}
                 type="number"
                 value={form.stock_qty}
                 onChange={(e) => setForm({ ...form, stock_qty: e.target.value })}
               />
-              <Input label="Stok Minimum (peringatan menipis)" type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} />
+              <Input alignRow label="Stok Minimum (peringatan menipis)" type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} />
               <Input
+                alignRow
                 label="Pajak/PPN (%) — kosongkan/0 jika tidak kena pajak"
                 type="number"
                 value={form.tax_rate}
@@ -381,26 +383,26 @@ export default function ProdukPage() {
                 <div className="border border-border rounded-xl p-4">
                   <p className="text-sm font-medium mb-3">Harga Eceran</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Input label="Harga Beli / Modal (per pcs)" type="number" value={form.cost_price} onChange={(e) => setForm({ ...form, cost_price: e.target.value })} />
-                    <Input label="Harga Jual Eceran (per pcs)" type="number" value={form.sell_price} onChange={(e) => setForm({ ...form, sell_price: e.target.value })} />
+                    <Input alignRow label="Harga Beli / Modal (per pcs)" type="number" value={form.cost_price} onChange={(e) => setForm({ ...form, cost_price: e.target.value })} />
+                    <Input alignRow label="Harga Jual Eceran (per pcs)" type="number" value={form.sell_price} onChange={(e) => setForm({ ...form, sell_price: e.target.value })} />
                   </div>
                 </div>
 
                 <div className="border border-border rounded-xl p-4">
                   <p className="text-sm font-medium mb-3">Harga Grosir</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <Input label="Isi per Grosir (pcs)" type="number" value={form.wholesale_qty} onChange={(e) => setForm({ ...form, wholesale_qty: e.target.value })} />
-                    <Input label="Harga Beli Grosir (per paket)" type="number" value={form.wholesale_cost_price} onChange={(e) => setForm({ ...form, wholesale_cost_price: e.target.value })} />
-                    <Input label="Harga Jual Grosir (per paket)" type="number" value={form.wholesale_price} onChange={(e) => setForm({ ...form, wholesale_price: e.target.value })} />
+                    <Input alignRow label="Isi per Grosir (pcs)" type="number" value={form.wholesale_qty} onChange={(e) => setForm({ ...form, wholesale_qty: e.target.value })} />
+                    <Input alignRow label="Harga Beli Grosir (per paket)" type="number" value={form.wholesale_cost_price} onChange={(e) => setForm({ ...form, wholesale_cost_price: e.target.value })} />
+                    <Input alignRow label="Harga Jual Grosir (per paket)" type="number" value={form.wholesale_price} onChange={(e) => setForm({ ...form, wholesale_price: e.target.value })} />
                   </div>
                 </div>
 
                 <div className="border border-border rounded-xl p-4">
                   <p className="text-sm font-medium mb-3">Harga Setengah Grosir</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <Input label="Isi per Setengah Grosir (pcs)" type="number" value={form.half_wholesale_qty} onChange={(e) => setForm({ ...form, half_wholesale_qty: e.target.value })} />
-                    <Input label="Harga Beli 1/2 Grosir (per paket)" type="number" value={form.half_wholesale_cost_price} onChange={(e) => setForm({ ...form, half_wholesale_cost_price: e.target.value })} />
-                    <Input label="Harga Jual 1/2 Grosir (per paket)" type="number" value={form.half_wholesale_price} onChange={(e) => setForm({ ...form, half_wholesale_price: e.target.value })} />
+                    <Input alignRow label="Isi per Setengah Grosir (pcs)" type="number" value={form.half_wholesale_qty} onChange={(e) => setForm({ ...form, half_wholesale_qty: e.target.value })} />
+                    <Input alignRow label="Harga Beli 1/2 Grosir (per paket)" type="number" value={form.half_wholesale_cost_price} onChange={(e) => setForm({ ...form, half_wholesale_cost_price: e.target.value })} />
+                    <Input alignRow label="Harga Jual 1/2 Grosir (per paket)" type="number" value={form.half_wholesale_price} onChange={(e) => setForm({ ...form, half_wholesale_price: e.target.value })} />
                   </div>
                 </div>
               </>
@@ -409,22 +411,22 @@ export default function ProdukPage() {
                 <div className="border border-border rounded-xl p-4">
                   <p className="text-sm font-medium mb-3">Harga per Kg</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Input label="Harga Beli per Kg" type="number" value={form.cost_per_kg} onChange={(e) => setForm({ ...form, cost_per_kg: e.target.value })} />
-                    <Input label="Harga Jual per Kg" type="number" value={form.price_per_kg} onChange={(e) => setForm({ ...form, price_per_kg: e.target.value })} />
+                    <Input alignRow label="Harga Beli per Kg" type="number" value={form.cost_per_kg} onChange={(e) => setForm({ ...form, cost_per_kg: e.target.value })} />
+                    <Input alignRow label="Harga Jual per Kg" type="number" value={form.price_per_kg} onChange={(e) => setForm({ ...form, price_per_kg: e.target.value })} />
                   </div>
                 </div>
                 <div className="border border-border rounded-xl p-4">
                   <p className="text-sm font-medium mb-3">Harga per 1/2 Kg</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Input label="Harga Beli per 1/2 Kg" type="number" value={form.cost_per_half_kg} onChange={(e) => setForm({ ...form, cost_per_half_kg: e.target.value })} />
-                    <Input label="Harga Jual per 1/2 Kg" type="number" value={form.price_per_half_kg} onChange={(e) => setForm({ ...form, price_per_half_kg: e.target.value })} />
+                    <Input alignRow label="Harga Beli per 1/2 Kg" type="number" value={form.cost_per_half_kg} onChange={(e) => setForm({ ...form, cost_per_half_kg: e.target.value })} />
+                    <Input alignRow label="Harga Jual per 1/2 Kg" type="number" value={form.price_per_half_kg} onChange={(e) => setForm({ ...form, price_per_half_kg: e.target.value })} />
                   </div>
                 </div>
                 <div className="border border-border rounded-xl p-4">
                   <p className="text-sm font-medium mb-3">Harga per Ons (peronan)</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Input label="Harga Beli per Ons" type="number" value={form.cost_per_ons} onChange={(e) => setForm({ ...form, cost_per_ons: e.target.value })} />
-                    <Input label="Harga Jual per Ons" type="number" value={form.price_per_ons} onChange={(e) => setForm({ ...form, price_per_ons: e.target.value })} />
+                    <Input alignRow label="Harga Beli per Ons" type="number" value={form.cost_per_ons} onChange={(e) => setForm({ ...form, cost_per_ons: e.target.value })} />
+                    <Input alignRow label="Harga Jual per Ons" type="number" value={form.price_per_ons} onChange={(e) => setForm({ ...form, price_per_ons: e.target.value })} />
                   </div>
                 </div>
               </>

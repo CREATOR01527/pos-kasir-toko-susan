@@ -43,44 +43,65 @@ export function Button({ children, variant = "primary", className = "", ...props
   );
 }
 
-export function Input({ label, hint, className = "", ...props }) {
+// alignRow=true: dipakai saat Input ini adalah salah satu dari beberapa kolom sejajar
+// dalam satu baris grid (mis. grid-cols-3). Memakai CSS subgrid supaya label, kotak input,
+// dan hint SELALU sejajar rapi lintas kolom, walau panjang teks labelnya beda-beda
+// (wrap 1/2/3 baris) atau cuma sebagian kolom yang punya hint. Baris grid pembungkusnya
+// tidak perlu class tambahan apa pun — cukup pastikan jumlah item persis sama dengan
+// jumlah kolom grid (satu baris visual saja, jangan sampai wrap ke baris ke-2).
+const rowFieldClass = (alignRow) =>
+  alignRow ? "grid row-span-3 [grid-template-rows:subgrid]" : "flex flex-col";
+
+export function Input({ label, hint, className = "", alignRow = false, ...props }) {
   return (
-    <div className={className}>
-      {label && <label className="block text-sm font-medium mb-1.5">{label}</label>}
+    <div className={`${rowFieldClass(alignRow)} ${className}`}>
+      {label ? (
+        <label className={`text-sm font-medium mb-1.5 leading-snug ${alignRow ? "self-end" : "flex items-end min-h-[2.5rem]"}`}>{label}</label>
+      ) : alignRow ? (
+        <span />
+      ) : null}
       <input
         {...props}
         onWheel={(e) => e.currentTarget.blur()}
-        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+        className={`w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary ${alignRow ? "self-start" : ""}`}
       />
-      {hint && <p className="text-xs text-ink-muted mt-1">{hint}</p>}
+      {hint ? <p className={`text-xs text-ink-muted mt-1 ${alignRow ? "self-start" : ""}`}>{hint}</p> : alignRow ? <span /> : null}
     </div>
   );
 }
 
-export function Textarea({ label, hint, className = "", ...props }) {
+export function Textarea({ label, hint, className = "", alignRow = false, ...props }) {
   return (
-    <div className={className}>
-      {label && <label className="block text-sm font-medium mb-1.5">{label}</label>}
+    <div className={`${rowFieldClass(alignRow)} ${className}`}>
+      {label ? (
+        <label className={`text-sm font-medium mb-1.5 leading-snug ${alignRow ? "self-end" : "flex items-end min-h-[2.5rem]"}`}>{label}</label>
+      ) : alignRow ? (
+        <span />
+      ) : null}
       <textarea
         {...props}
-        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+        className={`w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary ${alignRow ? "self-start" : ""}`}
       />
-      {hint && <p className="text-xs text-ink-muted mt-1">{hint}</p>}
+      {hint ? <p className={`text-xs text-ink-muted mt-1 ${alignRow ? "self-start" : ""}`}>{hint}</p> : alignRow ? <span /> : null}
     </div>
   );
 }
 
-export function Select({ label, hint, children, className = "", ...props }) {
+export function Select({ label, hint, children, className = "", alignRow = false, ...props }) {
   return (
-    <div className={className}>
-      {label && <label className="block text-sm font-medium mb-1.5">{label}</label>}
+    <div className={`${rowFieldClass(alignRow)} ${className}`}>
+      {label ? (
+        <label className={`text-sm font-medium mb-1.5 leading-snug ${alignRow ? "self-end" : "flex items-end min-h-[2.5rem]"}`}>{label}</label>
+      ) : alignRow ? (
+        <span />
+      ) : null}
       <select
         {...props}
-        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+        className={`w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary ${alignRow ? "self-start" : ""}`}
       >
         {children}
       </select>
-      {hint && <p className="text-xs text-ink-muted mt-1">{hint}</p>}
+      {hint ? <p className={`text-xs text-ink-muted mt-1 ${alignRow ? "self-start" : ""}`}>{hint}</p> : alignRow ? <span /> : null}
     </div>
   );
 }
