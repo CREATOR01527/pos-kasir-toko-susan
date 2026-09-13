@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, Input, Select, Textarea, Toggle } from "@/components/ui/kit";
+import ImageUploadField from "@/components/ui/ImageUploadField";
 import { LOGIN_FONTS, LOGIN_FONT_WEIGHTS } from "@/lib/loginFonts";
 
 function NotifTestButtons() {
@@ -87,6 +88,14 @@ export default function PengaturanPage() {
         </div>
         <Textarea label="Alamat Toko" value={form.store_address || ""} onChange={(e) => setForm({ ...form, store_address: e.target.value })} rows={2} className="mt-3" />
         <Textarea label="Catatan Kaki Struk" value={form.receipt_footer || ""} onChange={(e) => setForm({ ...form, receipt_footer: e.target.value })} rows={2} className="mt-3" />
+        <ImageUploadField
+          label="Ikon Aplikasi"
+          folder="app-icon"
+          value={form.app_icon_url || ""}
+          onChange={(url) => setForm({ ...form, app_icon_url: url })}
+          hint="Ikon yang muncul saat aplikasi dipasang/diinstal ke HP. Gunakan gambar persegi (disarankan 512x512px), latar mengisi penuh sampai tepi. Kosongkan untuk pakai ikon bawaan."
+          className="mt-3"
+        />
       </Card>
 
       <Card title="Pengaturan Struk">
@@ -139,13 +148,13 @@ export default function PengaturanPage() {
           onChange={(e) => setForm({ ...form, bank_transfer_info: e.target.value })}
           rows={2}
         />
-        <Input
-          label="URL Gambar QRIS (opsional)"
-          placeholder="https://..."
+        <ImageUploadField
+          label="Gambar QRIS (opsional)"
+          folder="qris"
           value={form.qris_image_url || ""}
-          onChange={(e) => setForm({ ...form, qris_image_url: e.target.value })}
+          onChange={(url) => setForm({ ...form, qris_image_url: url })}
+          hint="Upload foto/screenshot QRIS toko dari bank/merchant Anda, atau tempel link gambar manual."
           className="mt-3"
-          hint="Unggah gambar QRIS toko Anda ke penyimpanan gambar mana saja, lalu tempel link-nya di sini."
         />
       </Card>
 
@@ -248,21 +257,26 @@ export default function PengaturanPage() {
           )}
 
           {bgType === "image" && (
-            <Input
-              label="URL Gambar Latar (mendukung GIF animasi)"
-              placeholder="https://... (bisa file .jpg, .png, atau .gif)"
+            <ImageUploadField
+              label="Gambar Latar (mendukung GIF animasi)"
+              folder="login-bg"
+              accept="image/*"
+              maxSizeMB={8}
               value={form.login_bg_url || ""}
-              onChange={(e) => setForm({ ...form, login_bg_url: e.target.value })}
+              onChange={(url) => setForm({ ...form, login_bg_url: url })}
             />
           )}
 
           {bgType === "video" && (
-            <Input
-              label="URL Video Latar (.mp4)"
-              placeholder="https://.../latar.mp4"
+            <ImageUploadField
+              label="Video Latar (.mp4)"
+              folder="login-bg"
+              accept="video/mp4"
+              maxSizeMB={20}
+              isVideo
               value={form.login_bg_video_url || ""}
-              onChange={(e) => setForm({ ...form, login_bg_video_url: e.target.value })}
-              hint="Video akan diputar otomatis, diulang terus, dan tanpa suara — supaya halaman login terasa hidup."
+              onChange={(url) => setForm({ ...form, login_bg_video_url: url })}
+              hint="Video akan diputar otomatis, diulang terus, dan tanpa suara — supaya halaman login terasa hidup. Maks. 20MB."
             />
           )}
         </div>

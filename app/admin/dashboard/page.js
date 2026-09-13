@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [monthTx, setMonthTx] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
   const [lowStock, setLowStock] = useState([]);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [recent, setRecent] = useState([]);
   const [dailyTrend, setDailyTrend] = useState([]);
   const [todayProfit, setTodayProfit] = useState(0);
@@ -80,7 +81,7 @@ export default function DashboardPage() {
     // cabang di dropdown (kosong = semua cabang digabung, seperti sebelumnya).
     const withBranch = (q) => (branchFilter ? q.eq("branch_id", branchFilter) : q);
 
-    const [{ data: tToday }, { data: tMonth }, { data: items }, { data: products }, { data: recentTx }, { data: trend }, { data: todayItems }, { data: pos }, { data: payments }, { data: pendingRet }] =
+    const [{ data: tToday }, { data: tMonth }, { data: items }, { data: products }, { data: recentTx }, { data: trend }, { data: todayItems }, { data: pos }, { data: payments }, { data: pendingRet }, { count: productCount }] =
       await Promise.all([
         withBranch(supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", today)),
         withBranch(supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", monthStart)),
@@ -123,7 +124,11 @@ export default function DashboardPage() {
           .eq("return_type", "supplier")
           .eq("pickup_status", "belum_diambil")
           .order("created_at", { ascending: false }),
+        // count-only (head: true) supaya tidak perlu tarik seluruh baris produk cuma untuk dihitung
+        supabase.from("products").select("id", { count: "exact", head: true }).eq("active", true),
       ]);
+
+    setTotalProducts(productCount || 0);
 
     setTodayTx(tToday || []);
     setMonthTx(tMonth || []);
@@ -304,12 +309,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <StatCard label="Penjualan Hari Ini" value={formatRupiah(todayRevenue)} hint={`${todayTx.length} transaksi`} tone="primary" />
         <StatCard label="Laba Bersih Hari Ini" value={formatRupiah(todayProfit)} tone="primary" />
         <StatCard label="Penjualan Bulan Ini" value={formatRupiah(monthRevenue)} hint={`${monthTx.length} transaksi`} />
         <StatCard label="Estimasi Laba Bulan Ini" value={formatRupiah(monthProfit)} tone="primary" />
         <StatCard label="Stok Menipis" value={lowStock.length} tone={lowStock.length > 0 ? "danger" : "default"} hint="Perlu perhatian" />
+        <StatCard label="Total Produk" value={totalProducts} hint="Produk aktif di katalog" />
       </div>
 
       <Card title="Cek History">

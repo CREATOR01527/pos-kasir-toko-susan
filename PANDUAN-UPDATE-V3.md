@@ -10,6 +10,12 @@
    seluruhnya ke Cabang Utama; kalau Anda sudah sempat membuat cabang lain
    sebelum migrasi ini, cabang itu mulai dari stok 0 dan perlu disesuaikan
    manual di halaman Produk & Harga (pilih cabangnya, lalu edit stok tiap barang).
+5. `supabase/migration-13-upload-gambar.sql` — bikin tempat penyimpanan
+   (bucket) untuk upload gambar QRIS & latar layar login langsung dari
+   HP/laptop (sebelumnya cuma bisa tempel link URL manual).
+6. `supabase/migration-14-ikon-aplikasi.sql` — supaya admin bisa ganti ikon
+   aplikasi (yang muncul saat diinstal ke HP) sendiri lewat Pengaturan,
+   tanpa perlu edit kode lagi.
 
 (Kalau sebelumnya migration-08-pengaturan-struk.sql belum pernah dijalankan —
 itu penyebab error "Could not find receipt_show_address column" — jalankan itu
@@ -43,6 +49,19 @@ untuk 2 jadwal cron baru di `vercel.json`.
 - **Multi-Cabang**: menu Cabang (sidebar admin) sudah otomatis berisi "Cabang
   Utama" dari data toko lama. Tambah cabang baru kalau perlu, lalu tugaskan
   akun kasir ke cabang masing-masing di menu Pengguna.
+- **QRIS**: memakai gambar QRIS toko dari bank Anda sendiri (statis, gratis,
+  kasir konfirmasi manual — bukan lewat payment gateway pihak ketiga). Buka
+  Pengaturan Toko → Info Pembayaran → klik "Upload Gambar" di kolom Gambar
+  QRIS, pilih foto/screenshot QRIS Anda. Butuh migration-13-upload-gambar.sql
+  sudah dijalankan lebih dulu, kalau belum akan muncul pesan error yang
+  menyebutkan itu.
+- **Ikon Aplikasi**: bisa diganti admin sendiri kapan saja lewat Pengaturan
+  Toko → Identitas Toko → "Ikon Aplikasi" → Upload Gambar. Pakai gambar
+  persegi (disarankan 512x512px), latar mengisi penuh sampai tepi (jangan
+  transparan, karena Android akan memotongnya jadi bentuk bulat/kotak
+  sendiri). Kalau dikosongkan, aplikasi tetap pakai ikon toko bawaan.
+  Browser sering nge-cache ikon lama — kalau setelah ganti ikonnya belum
+  berubah, hapus cache situs di Chrome dulu.
 
 ## 4. Sudah dicek
 
