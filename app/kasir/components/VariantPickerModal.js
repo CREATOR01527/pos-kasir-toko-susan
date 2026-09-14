@@ -1,10 +1,21 @@
 "use client";
 
+import { useEffect } from "react";
 import { formatRupiah } from "@/lib/format";
 import { getPriceVariants } from "@/lib/pricing";
 
 export default function VariantPickerModal({ product, onPick, onClose }) {
   const variants = getPriceVariants(product);
+
+  // Tombol "Batal (Esc)" di bawah janji bisa ditutup pakai Escape -- pasang
+  // beneran di sini, sebelumnya cuma tulisan tanpa fungsi.
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>

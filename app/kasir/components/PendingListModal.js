@@ -1,9 +1,20 @@
 "use client";
 
+import { useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import { formatRupiah, formatDateTime } from "@/lib/format";
 
 export default function PendingListModal({ transactions, hotkeyLabel, onRecall, onDelete, onClose }) {
+  // Tombol "Tutup (Esc)" di bawah janji bisa ditutup pakai Escape -- pasang
+  // beneran di sini, sebelumnya cuma tulisan tanpa fungsi.
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   function handleDelete(e, tx) {
     e.stopPropagation();
     if (confirm("Batalkan transaksi tertahan ini? Barang di dalamnya tidak akan kembali ke keranjang.")) {

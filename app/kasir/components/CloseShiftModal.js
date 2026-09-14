@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
 import { formatRupiah } from "@/lib/format";
 
@@ -34,7 +35,12 @@ export default function CloseShiftModal({ shift, onClose, onClosed }) {
   async function submit() {
     setSaving(true);
     try {
-      await supabase
+      // PENTING: Supabase tidak melempar error otomatis untuk kegagalan di sisi
+      // database (mis. koneksi putus, kebijakan akses ditolak) -- harus dicek
+      // manual lewat { error }. Sebelumnya ini tidak dicek sama sekali, jadi
+      // kalau update GAGAL, aplikasi tetap menganggap berhasil dan kasir
+      // langsung logout, padahal status shift di database masih "terbuka".
+      const { error } = await supabase
         .from("shifts")
         .update({
           closing_cash: actualNum,
@@ -44,8 +50,10 @@ export default function CloseShiftModal({ shift, onClose, onClosed }) {
           status: "closed",
         })
         .eq("id", shift.id);
+      if (error) throw error;
       onClosed();
     } catch (err) {
+      toast.error(err.message || "Gagal menutup shift, coba lagi. Belum keluar dari sesi kasir.");
       setSaving(false);
     }
   }

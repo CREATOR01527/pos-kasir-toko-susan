@@ -175,7 +175,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
       const { data } = await supabase
         .from("products")
         .select(
-          "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes(*)"
+          "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes(*), product_branch_stock(*)"
         )
         .eq("active", true)
         .ilike("sku", cleanCode);
@@ -188,7 +188,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         const { data: viaBarcode } = await supabase
           .from("products")
           .select(
-            "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes!inner(*)"
+            "*, product_wholesale_pricing(*), product_kg_pricing(*), product_out_of_town_pricing(*), product_barcodes!inner(*), product_branch_stock(*)"
           )
           .eq("active", true)
           .ilike("product_barcodes.barcode", cleanCode);
@@ -221,6 +221,17 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
   // ---------- Shortkey kasir ----------
   useEffect(() => {
     function onKeydownGlobal(e) {
+      // PENTING: kalau ada modal/popup apa saja yang sedang terbuka, JANGAN proses
+      // shortcut apapun di sini. Tanpa penjagaan ini, menekan F7/F8/F12/dll saat
+      // modal lain sedang terbuka (misal saat memilih varian barang atau saat
+      // modal Pembayaran sudah tampil) bisa memicu modal LAIN ikut terbuka di
+      // atasnya secara bertumpuk -- bug nyata yang bisa membingungkan kasir.
+      // Modal yang butuh Enter/Escape sendiri (QtyModal, dll) sudah menangani
+      // keyboard-nya masing-masing secara terpisah.
+      const anyModalOpen =
+        !!variantProduct || !!qtyModalItem || paymentOpen || pendingOpen || cameraOpen || closeShiftOpen || receiptModalOpen;
+      if (anyModalOpen) return;
+
       const tag = document.activeElement?.tagName;
       const isTyping = tag === "INPUT" || tag === "TEXTAREA";
       const pressed = e.key.toUpperCase();
@@ -250,12 +261,22 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
       } else if (e.key === "ArrowUp" && !isTyping) {
         e.preventDefault();
         setSelectedIndex((i) => Math.max(0, i - 1));
-      } else if (e.key === "Delete") {
+      } else if (e.key === "Delete" && !isTyping) {
+        // PENTING: harus ada "&& !isTyping" di sini. Tanpa itu, menekan tombol
+        // Delete SAAT SEDANG MENGETIK di kolom Diskon/Antar (untuk menghapus
+        // angka ke depan kursor, cara wajar mengedit angka) akan IKUT
+        // menghapus barang yang sedang terpilih di keranjang -- bug nyata
+        // yang bisa bikin kasir kehilangan item tanpa sadar.
         if (selectedIndex >= 0) {
           e.preventDefault();
           removeItem(selectedIndex);
         }
-      } else if (e.key === "Escape") {
+      } else if (e.key === "Escape" && !isTyping) {
+        // Sama seperti di atas: kalau kasir menekan Escape untuk sekadar
+        // mengosongkan kolom pencarian (kolom itu sendiri sudah menangani
+        // Escape-nya sendiri di onKeyDown-nya), TANPA "&& !isTyping" di sini,
+        // event yang sama akan ikut "menembus" ke sini dan memunculkan
+        // konfirmasi "batalkan seluruh keranjang" yang tidak diminta.
         if (cart.length > 0) {
           e.preventDefault();
           if (confirm("Batalkan seluruh keranjang belanja?")) resetCart();
@@ -266,7 +287,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
     window.addEventListener("keydown", onKeydownGlobal);
     return () => window.removeEventListener("keydown", onKeydownGlobal);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, selectedIndex, hotkeys]);
+  }, [cart, selectedIndex, hotkeys, variantProduct, qtyModalItem, paymentOpen, pendingOpen, cameraOpen, closeShiftOpen, receiptModalOpen]);
 
   function removeItem(index) {
     setCart((prev) => prev.filter((_, i) => i !== index));
@@ -524,16 +545,27 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
       if (itemErr) throw itemErr;
 
       // kurangi stok cabang ini + catat pergerakan stok
+      // PENTING: kalau salah satu update di sini gagal, jangan diamkan saja --
+      // uang pelanggan sudah diterima & transaksi sudah tercatat, jadi tidak
+      // dibatalkan, tapi kasir/admin WAJIB diberi tahu supaya stok yang gagal
+      // ke-update bisa dibetulkan manual (sebelumnya di sini errornya tidak
+      // pernah dicek sama sekali, jadi kalau gagal, stok diam-diam salah tanpa
+      // ada yang sadar).
       let anyLowStock = false;
+      const stockErrors = [];
       for (const i of cart) {
         const product = products.find((p) => p.id === i.product_id);
         const qtyOut = i.qty * i.stock_factor;
         const branchStock = getBranchStock(product, sessionBranchId);
         const newStock = Math.max(0, branchStock.stock_qty - qtyOut);
-        await supabase
+        const { error: stockErr } = await supabase
           .from("product_branch_stock")
           .upsert({ product_id: i.product_id, branch_id: sessionBranchId, stock_qty: newStock, min_stock: branchStock.min_stock }, { onConflict: "product_id,branch_id" });
-        await supabase.from("stock_movements").insert({
+        if (stockErr) {
+          stockErrors.push(product?.name || i.product_id);
+          continue; // jangan catat pergerakan stok kalau stoknya sendiri gagal diupdate
+        }
+        const { error: moveErr } = await supabase.from("stock_movements").insert({
           product_id: i.product_id,
           branch_id: sessionBranchId,
           movement_type: "penjualan",
@@ -541,12 +573,19 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
           note: `Transaksi ${tx.id}`,
           created_by: profile.id,
         });
+        if (moveErr) console.error("Gagal mencatat pergerakan stok:", moveErr);
         if (product) {
           const row = (product.product_branch_stock || []).find((s) => s.branch_id === sessionBranchId);
           if (row) row.stock_qty = newStock;
           else product.product_branch_stock = [...(product.product_branch_stock || []), { branch_id: sessionBranchId, stock_qty: newStock, min_stock: branchStock.min_stock }];
           if (branchStock.min_stock > 0 && newStock <= branchStock.min_stock) anyLowStock = true;
         }
+      }
+      if (stockErrors.length > 0) {
+        toast.error(
+          `Transaksi tersimpan, TAPI stok barang berikut GAGAL diperbarui otomatis: ${stockErrors.join(", ")}. Cek & sesuaikan manual di halaman Produk & Harga.`,
+          { duration: 8000 }
+        );
       }
 
       // Notifikasi stok menipis dikirim di background (tidak menunggu/menghambat
@@ -557,11 +596,17 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
       }
 
       if (method === "kasbon" && customerId) {
-        await supabase.from("kasbon").insert({
+        const { error: kasbonErr } = await supabase.from("kasbon").insert({
           customer_id: customerId,
           transaction_id: tx.id,
           amount: totals.total,
         });
+        if (kasbonErr) {
+          toast.error(
+            `Transaksi tersimpan, TAPI catatan kasbon pelanggan GAGAL dibuat: ${kasbonErr.message}. Cek & tambahkan manual di halaman Kasbon Pelanggan.`,
+            { duration: 8000 }
+          );
+        }
       }
 
       await logActivity(supabase, {
@@ -610,7 +655,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
 
   if (needsBranchPicker) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background p-4">
+      <div className="flex items-center justify-center app-shell-height bg-background p-4">
         <div className="w-full max-w-sm bg-surface border border-border rounded-2xl p-6 text-center">
           <Building2 className="mx-auto mb-3 text-primary" size={32} />
           <h2 className="text-base font-semibold mb-1">Pilih Cabang</h2>
