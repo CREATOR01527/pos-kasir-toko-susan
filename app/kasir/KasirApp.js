@@ -639,7 +639,10 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
   }
 
   return (
-    <div className="flex flex-1 h-screen overflow-hidden bg-background">
+    <div className="flex flex-1 h-dvh overflow-hidden bg-background">
+      {/* h-dvh (bukan h-screen) supaya tinggi kontainer pas dengan layar yang benar-benar
+          kelihatan di HP, sehingga baris atas (hamburger, status scanner) dan bagian
+          kolom pencarian tetap diam di tempat -- yang scroll cuma daftar keranjang. */}
       {/* SIDEBAR: hanya shortkey, diatur admin -- disembunyikan di HP (jadi menu geser), mengecil di tablet */}
       {!isMobile && (
         <aside className={`${isTablet ? "w-48" : "w-56"} shrink-0 border-r border-border bg-surface flex flex-col`}>
@@ -829,7 +832,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Baris atas khusus HP: menu (hamburger) + konek scanner, DI ATAS kolom pencarian */}
         {isMobile && (
-          <div className="p-2.5 border-b border-border bg-surface flex items-center gap-2">
+          <div className="shrink-0 sticky top-0 z-30 p-2.5 border-b border-border bg-surface flex items-center gap-2">
             <button onClick={() => setMobileMenuOpen(true)} className="p-2 rounded-lg border border-border hover:bg-background shrink-0">
               <Menu size={18} />
             </button>
@@ -837,7 +840,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             <span className="text-xs text-ink-muted truncate ml-auto">{profile.full_name}</span>
           </div>
         )}
-        <div className="p-4 border-b border-border bg-surface flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative">
+        <div className="shrink-0 p-4 border-b border-border bg-surface flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative">
           <div className="flex-1 flex items-center gap-2 relative">
             <input
               ref={searchRef}

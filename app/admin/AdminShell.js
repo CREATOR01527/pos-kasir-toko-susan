@@ -114,7 +114,12 @@ export default function AdminShell({ profile, settings, children }) {
   }
 
   return (
-    <div className="flex flex-1 h-screen overflow-hidden">
+    <div className="flex flex-1 h-dvh overflow-hidden">
+      {/* h-dvh (bukan h-screen) supaya tingginya pas dengan area yang benar-benar
+          kelihatan di HP -- h-screen (100vh) di banyak browser HP lebih tinggi dari
+          layar yang kelihatan (karena address bar), jadi seluruh halaman termasuk
+          header ini ikut ke-scroll. Dengan h-dvh, hanya <main> di bawah yang scroll,
+          header (garis 3, nama toko, notifikasi, dark/terang, status scanner) tetap diam. */}
       {/* Sidebar tetap: disembunyikan di HP (diganti drawer di bawah), mengecil jadi ikon saja di tablet */}
       {!isMobile && (
         <aside className={`${sidebarWidth} shrink-0 border-r border-border bg-surface flex flex-col transition-all`}>
@@ -203,7 +208,7 @@ export default function AdminShell({ profile, settings, children }) {
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-14 shrink-0 border-b border-border bg-surface flex items-center justify-end gap-2 px-3 sm:px-5">
+        <header className="h-14 shrink-0 border-b border-border bg-surface flex items-center justify-end gap-2 px-3 sm:px-5 sticky top-0 z-30">
           {isMobile && (
             <button onClick={() => setMobileNavOpen(true)} className="mr-auto p-2 rounded-lg hover:bg-background">
               <Menu size={20} />

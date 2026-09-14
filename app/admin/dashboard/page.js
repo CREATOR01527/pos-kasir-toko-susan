@@ -19,6 +19,20 @@ function startOfMonth(d) {
   x.setHours(0, 0, 0, 0);
   return x;
 }
+// PENTING: dipakai untuk mengelompokkan transaksi per hari kalender (buat grafik
+// tren). Sebelumnya kode ini pakai `date.toISOString().slice(0,10)` yang
+// mengubah tanggal ke zona UTC dulu -- untuk toko di WIB (UTC+7), ini bikin
+// tanggal "hari ini" (jam 00:00 lokal) dianggap UTC masih "kemarin", sehingga
+// hampir semua transaksi hari berjalan tidak pernah cocok dengan kolom manapun
+// di grafik dan grafiknya kelihatan "tidak berubah". Fungsi ini ambil
+// tahun/bulan/tanggal APA ADANYA di zona waktu lokal perangkat, tanpa dikonversi.
+function localDateKey(d) {
+  const x = new Date(d);
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, "0");
+  const day = String(x.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 export default function DashboardPage() {
   const supabase = createClient();
@@ -31,8 +45,10 @@ export default function DashboardPage() {
   const [recent, setRecent] = useState([]);
   const [dailyTrend, setDailyTrend] = useState([]);
   const [todayProfit, setTodayProfit] = useState(0);
+  const [monthProfit, setMonthProfit] = useState(0);
   const [supplierDebt, setSupplierDebt] = useState({ outstanding: [], totalOutstanding: 0, paidTransfer: 0, paidCash: 0 });
   const [pendingReturns, setPendingReturns] = useState([]);
+  const [pendingTxCount, setPendingTxCount] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [branches, setBranches] = useState([]);
@@ -96,13 +112,13 @@ export default function DashboardPage() {
     // cabang di dropdown (kosong = semua cabang digabung, seperti sebelumnya).
     const withBranch = (q) => (branchFilter ? q.eq("branch_id", branchFilter) : q);
 
-    const [{ data: tToday }, { data: tMonth }, { data: items }, { data: products }, { data: recentTx }, { data: trend }, { data: todayItems }, { data: pos }, { data: payments }, { data: pendingRet }, { count: productCount }] =
+    const [{ data: tToday }, { data: tMonth }, { data: items }, { data: products }, { data: recentTx }, { data: trend }, { data: todayItems }, { data: pos }, { data: payments }, { data: pendingRet }, { count: productCount }, { count: pendingTxCnt }] =
       await Promise.all([
         withBranch(supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", today)),
         withBranch(supabase.from("transactions").select("*").eq("status", "completed").gte("created_at", monthStart)),
         supabase
           .from("transaction_items")
-          .select("product_id, qty, subtotal, cost_price_snapshot, products(name)")
+          .select("transaction_id, product_id, qty, subtotal, cost_price_snapshot, products(name)")
           .gte("created_at", monthStart),
         (branchFilter
           ? supabase.from("product_branch_stock").select("stock_qty, min_stock, products(name), branches(name)").eq("branch_id", branchFilter)
@@ -127,23 +143,37 @@ export default function DashboardPage() {
           .from("transaction_items")
           .select("transaction_id, qty, subtotal, cost_price_snapshot")
           .gte("created_at", today),
-        supabase
-          .from("purchase_orders")
-          .select("*, suppliers(name)")
-          .gt("remaining_debt", 0)
-          .order("created_at", { ascending: false }),
-        supabase.from("supplier_payments").select("amount, method"),
-        supabase
-          .from("returns")
-          .select("*, products(name), suppliers:reference_supplier_id(name)")
-          .eq("return_type", "supplier")
-          .eq("pickup_status", "belum_diambil")
-          .order("created_at", { ascending: false }),
+        withBranch(
+          supabase
+            .from("purchase_orders")
+            .select("*, suppliers(name)")
+            .gt("remaining_debt", 0)
+            .order("created_at", { ascending: false })
+        ),
+        // supplier_payments tidak punya kolom branch_id sendiri -- cabangnya
+        // ikut nota pembeliannya (purchase_orders), jadi difilter lewat join.
+        (branchFilter
+          ? supabase.from("supplier_payments").select("amount, method, purchase_orders!inner(branch_id)").eq("purchase_orders.branch_id", branchFilter)
+          : supabase.from("supplier_payments").select("amount, method")
+        ),
+        withBranch(
+          supabase
+            .from("returns")
+            .select("*, products(name), suppliers:reference_supplier_id(name)")
+            .eq("return_type", "supplier")
+            .eq("pickup_status", "belum_diambil")
+            .order("created_at", { ascending: false })
+        ),
         // count-only (head: true) supaya tidak perlu tarik seluruh baris produk cuma untuk dihitung
         supabase.from("products").select("id", { count: "exact", head: true }).eq("active", true),
+        // Transaksi yang masih "ditahan" (F7) di kasir -- sengaja TIDAK dihitung di
+        // Penjualan/Produk Terlaris/Laba manapun karena belum benar-benar lunas.
+        // Ditampilkan terpisah di sini supaya kelihatan jelas, bukan "hilang".
+        withBranch(supabase.from("transactions").select("id", { count: "exact", head: true }).eq("status", "pending")),
       ]);
 
     setTotalProducts(productCount || 0);
+    setPendingTxCount(pendingTxCnt || 0);
 
     setTodayTx(tToday || []);
     setMonthTx(tMonth || []);
@@ -160,29 +190,42 @@ export default function DashboardPage() {
     setRecent(recentTx || []);
 
     const map = new Map();
-    (items || []).forEach((it) => {
-      const key = it.product_id;
-      const prev = map.get(key) || { name: it.products?.name || "-", qty: 0, profit: 0, revenue: 0 };
-      prev.qty += Number(it.qty);
-      prev.revenue += Number(it.subtotal);
-      prev.profit += Number(it.subtotal) - Number(it.cost_price_snapshot) * Number(it.qty);
-      map.set(key, prev);
-    });
-    setTopProducts(
-      Array.from(map.values())
-        .sort((a, b) => b.qty - a.qty)
-        .slice(0, 8)
-    );
+    // PENTING: transaction_items tidak tahu status transaksinya (completed/pending)
+    // ataupun cabangnya sendiri -- sebelumnya SEMUA item bulan ini dihitung apa
+    // adanya, termasuk item dari transaksi yang masih "ditahan" (belum dibayar)
+    // dan dari cabang lain walau admin sudah memfilih 1 cabang saja. Disaring
+    // dulu supaya hanya item milik transaksi yang benar-benar sudah selesai
+    // (dan sesuai cabang terpilih) ikut dihitung di "Produk Terlaris".
+    const monthTxIds = new Set((tMonth || []).map((t) => t.id));
+    (items || [])
+      .filter((it) => monthTxIds.has(it.transaction_id))
+      .forEach((it) => {
+        const key = it.product_id;
+        const prev = map.get(key) || { name: it.products?.name || "-", qty: 0, profit: 0, revenue: 0 };
+        prev.qty += Number(it.qty);
+        prev.revenue += Number(it.subtotal);
+        prev.profit += Number(it.subtotal) - Number(it.cost_price_snapshot) * Number(it.qty);
+        map.set(key, prev);
+      });
+    // PENTING: pakai SEMUA produk bulan ini untuk hitung total laba — jangan
+    // pakai daftar yang sudah dipotong 8 teratas (itu cuma buat tampilan
+    // "Produk Terlaris"). Sebelumnya total laba bulanan ikut kepotong ke 8
+    // produk saja, jadi selalu lebih kecil dari yang sebenarnya begitu toko
+    // menjual lebih dari 8 jenis barang -- makanya tidak pernah cocok kalau
+    // dibandingkan dengan menjumlahkan laba harian sebulan penuh.
+    const allMonthProducts = Array.from(map.values());
+    setTopProducts(allMonthProducts.sort((a, b) => b.qty - a.qty).slice(0, 8));
+    setMonthProfit(allMonthProducts.reduce((s, p) => s + p.profit, 0));
 
     const dayMap = new Map();
     for (let i = 0; i < 7; i++) {
       const d = new Date(sevenDaysAgo);
       d.setDate(d.getDate() + i);
-      const key = d.toISOString().slice(0, 10);
+      const key = localDateKey(d);
       dayMap.set(key, { date: key, label: d.toLocaleDateString("id-ID", { weekday: "short" }), total: 0 });
     }
     (trend || []).forEach((t) => {
-      const key = t.created_at.slice(0, 10);
+      const key = localDateKey(t.created_at);
       if (dayMap.has(key)) dayMap.get(key).total += Number(t.total);
     });
     setDailyTrend(Array.from(dayMap.values()));
@@ -209,9 +252,16 @@ export default function DashboardPage() {
   async function handleExport() {
     setExporting(true);
     try {
-      const { data } = await supabase
-        .from("transactions")
-        .select("created_at, total, subtotal, discount, delivery_fee, payment_method, status, profiles(full_name), customers(name)")
+      const { data } = await (
+        branchFilter
+          ? supabase
+              .from("transactions")
+              .select("created_at, total, subtotal, discount, delivery_fee, payment_method, status, profiles(full_name), customers(name)")
+              .eq("branch_id", branchFilter)
+          : supabase
+              .from("transactions")
+              .select("created_at, total, subtotal, discount, delivery_fee, payment_method, status, profiles(full_name), customers(name)")
+      )
         .order("created_at", { ascending: false })
         .limit(1000);
       const rows = (data || []).map((t) => ({
@@ -252,20 +302,27 @@ export default function DashboardPage() {
           .order("created_at", { ascending: false }),
         supabase
           .from("transaction_items")
-          .select("product_id, qty, subtotal, cost_price_snapshot, products(name)")
+          .select("transaction_id, product_id, qty, subtotal, cost_price_snapshot, products(name)")
           .gte("created_at", rangeStart)
           .lte("created_at", rangeEnd),
       ]);
 
+      // Sama seperti di "Produk Terlaris" utama: item cuma dihitung kalau memang
+      // milik transaksi yang berstatus selesai & sesuai cabang terpilih (txs
+      // di atas sudah difilter begitu), supaya transaksi yang masih ditahan
+      // atau dari cabang lain tidak ikut menggelembungkan angka rentang ini.
+      const txIds = new Set((txs || []).map((t) => t.id));
       const map = new Map();
-      (items || []).forEach((it) => {
-        const key = it.product_id;
-        const prev = map.get(key) || { name: it.products?.name || "-", qty: 0, revenue: 0, profit: 0 };
-        prev.qty += Number(it.qty);
-        prev.revenue += Number(it.subtotal);
-        prev.profit += Number(it.subtotal) - Number(it.cost_price_snapshot) * Number(it.qty);
-        map.set(key, prev);
-      });
+      (items || [])
+        .filter((it) => txIds.has(it.transaction_id))
+        .forEach((it) => {
+          const key = it.product_id;
+          const prev = map.get(key) || { name: it.products?.name || "-", qty: 0, revenue: 0, profit: 0 };
+          prev.qty += Number(it.qty);
+          prev.revenue += Number(it.subtotal);
+          prev.profit += Number(it.subtotal) - Number(it.cost_price_snapshot) * Number(it.qty);
+          map.set(key, prev);
+        });
       const topProducts = Array.from(map.values()).sort((a, b) => b.qty - a.qty).slice(0, 8);
 
       const revenue = (txs || []).reduce((s, t) => s + Number(t.total), 0);
@@ -295,7 +352,6 @@ export default function DashboardPage() {
 
   const todayRevenue = todayTx.reduce((s, t) => s + Number(t.total), 0);
   const monthRevenue = monthTx.reduce((s, t) => s + Number(t.total), 0);
-  const monthProfit = topProducts.reduce((s, p) => s + p.profit, 0);
 
   const PAYMENT_LABELS = { tunai: "Tunai", transfer: "Transfer", qris: "QRIS", kasbon: "Kasbon" };
   const paymentBreakdown = Object.keys(PAYMENT_LABELS).map((method) => {
@@ -335,6 +391,16 @@ export default function DashboardPage() {
         <StatCard label="Stok Menipis" value={lowStock.length} tone={lowStock.length > 0 ? "danger" : "default"} hint="Perlu perhatian" />
         <StatCard label="Total Produk" value={totalProducts} hint="Produk aktif di katalog" />
       </div>
+
+      {pendingTxCount > 0 && (
+        <div className="rounded-lg border border-warning/40 bg-warning-soft px-4 py-2.5 text-sm text-warning flex items-center gap-2">
+          <span>⏸</span>
+          <span>
+            Ada <strong>{pendingTxCount} transaksi</strong> yang masih ditahan di kasir (belum dibayar) — sengaja{" "}
+            <strong>tidak</strong> dihitung di Penjualan/Produk Terlaris/Laba di atas sampai benar-benar selesai dibayar.
+          </span>
+        </div>
+      )}
 
       <Card title="Cek History">
         <p className="text-xs text-ink-muted mb-3">Pilih rentang tanggal untuk melihat rangkuman penjualan di luar &quot;Hari Ini&quot;/&quot;Bulan Ini&quot; di atas. Contoh: 01/09/2026 - 14/09/2026.</p>
