@@ -114,12 +114,12 @@ export default function AdminShell({ profile, settings, children }) {
   }
 
   return (
-    <div className="flex flex-1 h-dvh overflow-hidden">
-      {/* h-dvh (bukan h-screen) supaya tingginya pas dengan area yang benar-benar
-          kelihatan di HP -- h-screen (100vh) di banyak browser HP lebih tinggi dari
-          layar yang kelihatan (karena address bar), jadi seluruh halaman termasuk
-          header ini ikut ke-scroll. Dengan h-dvh, hanya <main> di bawah yang scroll,
-          header (garis 3, nama toko, notifikasi, dark/terang, status scanner) tetap diam. */}
+    <div className="flex flex-1 app-shell-height overflow-hidden">
+      {/* Class "app-shell-height" (lihat globals.css) = tinggi 100dvh dengan fallback 100vh,
+          supaya tingginya pas dengan area yang benar-benar kelihatan di HP dan tetap
+          bekerja di browser/webview lama yang belum mendukung satuan dvh. Kalau
+          kontainer ini tidak punya tinggi yang jelas, seluruh halaman (termasuk
+          header) akan ikut ke-scroll bareng -- itu sebabnya header sempat tidak diam. */}
       {/* Sidebar tetap: disembunyikan di HP (diganti drawer di bawah), mengecil jadi ikon saja di tablet */}
       {!isMobile && (
         <aside className={`${sidebarWidth} shrink-0 border-r border-border bg-surface flex flex-col transition-all`}>
@@ -216,7 +216,10 @@ export default function AdminShell({ profile, settings, children }) {
           )}
           <ScannerStatusWidget />
           <div className="relative">
-            <button onClick={() => setNotifOpen((v) => !v)} className="relative p-2 rounded-lg hover:bg-background">
+            <button
+              onClick={() => (isMobile ? router.push("/admin/notifikasi") : setNotifOpen((v) => !v))}
+              className="relative p-2 rounded-lg hover:bg-background"
+            >
               <Bell size={18} />
               {lowStockCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-danger text-white text-[10px] flex items-center justify-center">
@@ -224,7 +227,7 @@ export default function AdminShell({ profile, settings, children }) {
                 </span>
               )}
             </button>
-            {notifOpen && (
+            {!isMobile && notifOpen && (
               <div className="absolute right-0 mt-2 w-72 bg-surface border border-border rounded-xl shadow-lg p-3 z-20">
                 <p className="text-xs font-medium mb-2">Stok Menipis</p>
                 {lowStockItems.length === 0 && <p className="text-xs text-ink-muted">Semua stok aman.</p>}
@@ -236,6 +239,12 @@ export default function AdminShell({ profile, settings, children }) {
                     </div>
                   ))}
                 </div>
+                <button
+                  onClick={() => { setNotifOpen(false); router.push("/admin/notifikasi"); }}
+                  className="w-full text-center text-xs text-primary mt-2 pt-2 border-t border-border hover:underline"
+                >
+                  Lihat Semua di Halaman Notifikasi
+                </button>
               </div>
             )}
           </div>

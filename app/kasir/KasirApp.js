@@ -639,10 +639,11 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
   }
 
   return (
-    <div className="flex flex-1 h-dvh overflow-hidden bg-background">
-      {/* h-dvh (bukan h-screen) supaya tinggi kontainer pas dengan layar yang benar-benar
-          kelihatan di HP, sehingga baris atas (hamburger, status scanner) dan bagian
-          kolom pencarian tetap diam di tempat -- yang scroll cuma daftar keranjang. */}
+    <div className="flex flex-1 app-shell-height overflow-hidden bg-background">
+      {/* Class "app-shell-height" (lihat globals.css) = tinggi 100dvh dengan fallback 100vh,
+          supaya tinggi kontainer pas dengan layar yang benar-benar kelihatan di HP
+          (dan tetap bekerja di browser/webview lama), sehingga baris atas (hamburger,
+          status scanner) dan kolom pencarian tetap diam -- yang scroll cuma keranjang. */}
       {/* SIDEBAR: hanya shortkey, diatur admin -- disembunyikan di HP (jadi menu geser), mengecil di tablet */}
       {!isMobile && (
         <aside className={`${isTablet ? "w-48" : "w-56"} shrink-0 border-r border-border bg-surface flex flex-col`}>
@@ -662,6 +663,18 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             <div className="mt-2">
               <ScannerStatusWidget />
             </div>
+            {/* Tablet biasanya tidak punya scanner USB/Bluetooth seperti di kasir meja,
+                tapi ada kamera -- sediakan tombol scan kamera juga di sini (desktop
+                dibiarkan seperti semula, biasanya sudah pakai scanner fisik). */}
+            {isTablet && (
+              <button
+                type="button"
+                onClick={() => setCameraOpen(true)}
+                className="mt-2 w-full flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-background"
+              >
+                <ScanLine size={14} /> Scan via Kamera
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-auto p-3">
@@ -674,11 +687,16 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
               {SYSTEM_ACTIONS.map((a) => {
                 const Icon = a.icon;
                 return (
-                  <div key={a.key} className="w-full flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-sm bg-background">
+                  <button
+                    key={a.key}
+                    type="button"
+                    onClick={() => triggerMobileShortcut(a.key)}
+                    className="w-full flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-sm bg-background hover:border-primary hover:bg-primary-soft active:bg-primary-soft transition text-left"
+                  >
                     <Icon size={15} className="text-ink-muted shrink-0" />
                     <span className="flex-1 truncate">{a.label}</span>
                     <span className="kbd shrink-0">{hotkeys[a.key]}</span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -931,11 +949,11 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
                     <p className="text-sm font-medium flex-1 truncate">{item.name}</p>
                     <p className="text-sm font-semibold">{formatRupiah(item.unit_price * item.qty)}</p>
                   </div>
-                  <div className="flex items-center justify-between gap-2 mt-1.5" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1.5 mt-1.5" onClick={(e) => e.stopPropagation()}>
                     <select
                       value={item.price_type}
                       onChange={(e) => changeCartItemVariant(index, e.target.value)}
-                      className="rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/40 max-w-[150px]"
+                      className="rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/40 min-w-0 max-w-[120px]"
                     >
                       {getPriceVariants(products.find((p) => p.id === item.product_id) || {}).map((v) => (
                         <option key={v.price_type} value={v.price_type}>
@@ -943,29 +961,32 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
                         </option>
                       ))}
                     </select>
-                    <span className="text-xs text-ink-muted">{formatNumber(item.qty, 2)} x {formatRupiah(item.unit_price)}</span>
-                  </div>
-                  {/* Di desktop qty/hapus dipakai lewat tombol F4/Delete di keyboard; di HP
-                      tidak ada keyboard, jadi disediakan tombol sentuh supaya tetap bisa dipakai. */}
-                  <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-xs text-ink-muted flex-1 min-w-0 truncate">{formatNumber(item.qty, 2)} x {formatRupiah(item.unit_price)}</span>
+                    {/* Di desktop qty/hapus dipakai lewat tombol F4/Delete di keyboard; di HP
+                        tidak ada keyboard, jadi disediakan tombol sentuh. Dibuat ikon saja
+                        (bukan tombol teks penuh) supaya tidak makan tempat di layar sempit. */}
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedIndex(index);
                         setQtyModalItem(item);
                       }}
-                      className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-surface"
+                      title="Ubah Qty"
+                      aria-label="Ubah Qty"
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md border border-border bg-background hover:bg-surface"
                     >
-                      <Hash size={13} /> Ubah Qty
+                      <Hash size={14} />
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         if (confirm(`Hapus "${item.name}" dari keranjang?`)) removeItem(index);
                       }}
-                      className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-2 py-1.5 text-xs font-medium text-danger hover:bg-danger/10"
+                      title="Hapus"
+                      aria-label="Hapus"
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md border border-danger/30 bg-danger-soft text-danger hover:bg-danger/10"
                     >
-                      <Trash2 size={13} /> Hapus
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
@@ -982,6 +1003,10 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
                   <th className="text-right px-4 py-2 font-medium">Harga</th>
                   <th className="text-right px-4 py-2 font-medium">Qty</th>
                   <th className="text-right px-4 py-2 font-medium">Subtotal</th>
+                  {/* Tablet layar sentuh umumnya tidak punya keyboard fisik untuk F4/Delete,
+                      jadi disediakan kolom tombol sentuh. Desktop (asumsi ada keyboard/mouse)
+                      tetap seperti semula supaya tidak berubah. */}
+                  {isTablet && <th className="text-right px-4 py-2 font-medium">Aksi</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1010,11 +1035,40 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
                     <td className="px-4 py-2.5 text-right">{formatRupiah(item.unit_price)}</td>
                     <td className="px-4 py-2.5 text-right">{formatNumber(item.qty, 2)}</td>
                     <td className="px-4 py-2.5 text-right font-medium">{formatRupiah(item.unit_price * item.qty)}</td>
+                    {isTablet && (
+                      <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedIndex(index);
+                              setQtyModalItem(item);
+                            }}
+                            title="Ubah Qty"
+                            aria-label="Ubah Qty"
+                            className="w-7 h-7 flex items-center justify-center rounded-md border border-border bg-background hover:bg-surface"
+                          >
+                            <Hash size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Hapus "${item.name}" dari keranjang?`)) removeItem(index);
+                            }}
+                            title="Hapus"
+                            aria-label="Hapus"
+                            className="w-7 h-7 flex items-center justify-center rounded-md border border-danger/30 bg-danger-soft text-danger hover:bg-danger/10"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {cart.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center text-ink-muted py-16 text-sm">
+                    <td colSpan={isTablet ? 6 : 5} className="text-center text-ink-muted py-16 text-sm">
                       Keranjang kosong. Cari barang atau gunakan shortcut / scan barcode.
                     </td>
                   </tr>

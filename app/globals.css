@@ -52,6 +52,23 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+/* Tinggi penuh layar untuk kerangka aplikasi (sidebar+header+konten), dengan
+   fallback untuk browser/webview lama yang belum mendukung satuan dvh (mis.
+   beberapa in-app browser WhatsApp/Instagram, Android WebView versi lama).
+   Kalau baris kedua (dvh) tidak dikenali browser, baris pertama (vh) tetap
+   dipakai -- jadi kerangka aplikasi tetap punya tinggi yang jelas dan header
+   tidak ikut ke-scroll bersama konten. Kalau dvh DIDUKUNG, baris ini yang
+   menang (override) karena ditulis belakangan, dan lebih akurat menyesuaikan
+   tinggi layar asli di HP (memperhitungkan address bar yang muncul/hilang). */
+.app-shell-height {
+  height: 100vh;
+}
+@supports (height: 100dvh) {
+  .app-shell-height {
+    height: 100dvh;
+  }
+}
+
 * {
   border-color: var(--color-border);
 }
