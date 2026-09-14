@@ -449,8 +449,19 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
     setPendingList((prev) => prev.filter((t) => t.id !== tx.id));
     setPendingOpen(false);
 
-    // Hapus record pending dari database karena sudah ditarik kembali ke keranjang
-    supabase.from("transactions").delete().eq("id", tx.id).then(() => {});
+    // Hapus record pending dari database karena sudah ditarik kembali ke keranjang.
+    // Dicek hasilnya supaya kalau RLS/izin menolak, kasir diberi tahu (kalau tidak,
+    // transaksi ini akan "hidup lagi" di daftar tertahan setelah reload).
+    supabase
+      .from("transactions")
+      .delete()
+      .eq("id", tx.id)
+      .select("id")
+      .then(({ data, error }) => {
+        if (error || !data || data.length === 0) {
+          toast.error("Transaksi lama gagal dihapus dari server, mungkin muncul lagi di daftar tertahan setelah reload.");
+        }
+      });
   }
 
   // ---------- Batalkan transaksi tertahan (tombol X / tong sampah) ----------
@@ -458,8 +469,19 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
     try {
       const { error } = await supabase.from("transaction_items").delete().eq("transaction_id", tx.id);
       if (error) throw error;
-      const { error: txError } = await supabase.from("transactions").delete().eq("id", tx.id);
+      const { data: txDeleted, error: txError } = await supabase
+        .from("transactions")
+        .delete()
+        .eq("id", tx.id)
+        .select("id");
       if (txError) throw txError;
+      // Supabase/Postgres tidak melempar error saat RLS memblokir DELETE,
+      // hanya menghasilkan 0 baris. Cek eksplisit di sini supaya tidak
+      // menampilkan "berhasil" padahal baris masih ada di database
+      // (transaksi jadi terlihat muncul lagi setelah refresh).
+      if (!txDeleted || txDeleted.length === 0) {
+        throw new Error("Transaksi tidak terhapus (kemungkinan tidak diizinkan oleh server). Coba muat ulang halaman.");
+      }
       setPendingList((prev) => prev.filter((t) => t.id !== tx.id));
       toast.success("Transaksi tertahan dibatalkan");
     } catch (err) {
