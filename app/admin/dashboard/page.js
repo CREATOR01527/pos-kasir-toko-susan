@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
 import { formatRupiah, formatNumber, formatDateTime, formatDate } from "@/lib/format";
@@ -43,20 +43,35 @@ export default function DashboardPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyResult, setHistoryResult] = useState(null);
 
+  // Selalu simpan versi TERBARU dari fungsi load ke dalam ref ini setiap kali
+  // render selesai, supaya realtime/interval di bawah (yang cuma dipasang
+  // sekali saat mount) tetap bisa memanggil versi load yang tahu filter
+  // cabang terkini — bukan versi "beku" dari render pertama.
+  const loadRef = useRef(() => {});
   useEffect(() => {
-    load();
+    loadRef.current = load;
+  });
+
+  useEffect(() => {
+    loadRef.current();
     supabase.from("branches").select("*").eq("active", true).order("name").then(({ data }) => setBranches(data || []));
 
     // Realtime: begitu ada transaksi baru/berubah, grafik & angka-angka lain
     // langsung dimuat ulang tanpa perlu refresh halaman manual.
+    // PENTING: pakai loadRef.current() (bukan langsung load()) supaya selalu
+    // memanggil versi TERBARU dari fungsi load — kalau langsung "load()" di
+    // sini, closure ini permanen "membeku" memakai nilai branchFilter saat
+    // pertama kali halaman dibuka, jadi begitu admin ganti cabang, hasilnya
+    // akan diam-diam balik ke "semua cabang" tiap kali realtime/interval ini
+    // menyala. Ini sumber bug "Penjualan Hari Ini" yang kelihatan salah.
     const channel = supabase
       .channel("dashboard-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => loadRef.current())
       .subscribe();
 
     // Jaring pengaman: tetap muat ulang tiap 30 detik walau koneksi realtime
     // sempat putus (mis. tab lama tidak aktif / jaringan sempat terputus).
-    const interval = setInterval(load, 30000);
+    const interval = setInterval(() => loadRef.current(), 30000);
 
     return () => {
       supabase.removeChannel(channel);
@@ -110,7 +125,7 @@ export default function DashboardPage() {
         ),
         supabase
           .from("transaction_items")
-          .select("qty, subtotal, cost_price_snapshot")
+          .select("transaction_id, qty, subtotal, cost_price_snapshot")
           .gte("created_at", today),
         supabase
           .from("purchase_orders")
@@ -172,10 +187,13 @@ export default function DashboardPage() {
     });
     setDailyTrend(Array.from(dayMap.values()));
 
-    const profitToday = (todayItems || []).reduce(
-      (s, it) => s + (Number(it.subtotal) - Number(it.cost_price_snapshot) * Number(it.qty)),
-      0
-    );
+    // dipakai supaya "Laba Bersih Hari Ini" ikut kefilter cabang juga —
+    // transaction_items tidak punya kolom branch_id sendiri, jadi dicocokkan
+    // lewat daftar transaksi hari ini yang sudah benar (tToday, sudah kefilter).
+    const todayTxIds = new Set((tToday || []).map((t) => t.id));
+    const profitToday = (todayItems || [])
+      .filter((it) => todayTxIds.has(it.transaction_id))
+      .reduce((s, it) => s + (Number(it.subtotal) - Number(it.cost_price_snapshot) * Number(it.qty)), 0);
     setTodayProfit(profitToday);
 
     const paidTransfer = (payments || []).filter((p) => p.method === "transfer").reduce((s, p) => s + Number(p.amount), 0);
