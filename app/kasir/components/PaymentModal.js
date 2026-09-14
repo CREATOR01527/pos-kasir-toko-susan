@@ -37,7 +37,7 @@ export default function PaymentModal({ total, customer, settings, hotkeyLabel, o
         </div>
 
         <label className="block text-sm font-medium mb-1.5">Metode Pembayaran</label>
-        <div className="grid grid-cols-4 gap-2 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
           {["tunai", "transfer", "qris", "kasbon"].map((m) => (
             <button
               key={m}

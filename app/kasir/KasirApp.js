@@ -677,7 +677,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             )}
           </div>
 
-          <div className="flex-1 overflow-auto p-3">
+          <div className="flex-1 overflow-auto overscroll-contain p-3">
             {/* Shortcut Aksi Sistem: F2/F4/F7/F8/F12/F6, bisa diatur admin */}
             <div className="flex items-center justify-between px-1 mb-1.5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Shortcut Aksi</p>
@@ -764,7 +764,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
               </button>
             </div>
 
-            <div className="flex-1 overflow-auto p-3 space-y-4">
+            <div className="flex-1 overflow-auto overscroll-contain p-3 space-y-4">
               <div>
                 <div className="flex items-center justify-between px-1 mb-1.5">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Shortcut Aksi (tap untuk pakai)</p>
@@ -931,7 +931,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
         )}
 
         {isMobile ? (
-          <div className="flex-1 overflow-auto p-3 space-y-2">
+          <div className="flex-1 overflow-auto overscroll-contain p-3 space-y-2">
             {cart.length === 0 ? (
               <p className="text-center text-ink-muted py-16 text-sm">
                 Keranjang kosong. Cari barang atau gunakan scan barcode.
@@ -994,7 +994,7 @@ export default function KasirApp({ profile, isAdminAccount, impersonating, initi
             )}
           </div>
         ) : (
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto overscroll-contain">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface border-b border-border text-xs text-ink-muted">
                 <tr>

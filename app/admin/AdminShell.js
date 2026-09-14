@@ -256,7 +256,7 @@ export default function AdminShell({ profile, settings, children }) {
             <p className="text-xs text-ink-muted leading-tight">Admin</p>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-3 sm:p-6">{children}</main>
+        <main className="flex-1 overflow-auto overscroll-contain p-3 sm:p-6">{children}</main>
       </div>
     </div>
   );

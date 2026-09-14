@@ -52,6 +52,20 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+/* Kunci html & body supaya TIDAK PERNAH ikut bisa discroll oleh browser itu
+   sendiri -- ini pasangan wajib dari .app-shell-height di bawah. Tanpa ini,
+   kalau ada elemen manapun yang meleset sedikit saja lebih tinggi dari layar
+   (menu drawer, dropdown, notifikasi, dll), browser akan membuat SELURUH
+   halaman bisa discroll, dan header pun ikut ke-scroll bersamanya walau
+   struktur flex di dalamnya sudah benar. overscroll-behavior: none juga
+   mencegah efek "mantul" (rubber-band bounce) di iOS/Android yang membuat
+   header terlihat "geser" sesaat walau sebenarnya cuma efek visual. */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* Tinggi penuh layar untuk kerangka aplikasi (sidebar+header+konten), dengan
    fallback untuk browser/webview lama yang belum mendukung satuan dvh (mis.
    beberapa in-app browser WhatsApp/Instagram, Android WebView versi lama).

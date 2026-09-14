@@ -146,6 +146,16 @@ export default function ProdukPage() {
       return toast.error("Harga jual per Kg tidak boleh lebih rendah dari harga beli per Kg (akan rugi)");
     }
 
+    if (form.name.trim()) {
+      const nameTrimmed = form.name.trim();
+      let nameQuery = supabase.from("products").select("id, name").ilike("name", nameTrimmed);
+      if (form.id) nameQuery = nameQuery.neq("id", form.id);
+      const { data: nameMatches } = await nameQuery;
+      if (nameMatches && nameMatches.length > 0) {
+        return toast.error(`Nama produk "${nameTrimmed}" sudah dipakai oleh produk lain. Gunakan nama lain, atau edit produk yang sudah ada.`);
+      }
+    }
+
     if (form.sku) {
       const conflict = await findBarcodeConflict(supabase, form.sku, { excludeProductId: form.id });
       if (conflict) {
@@ -344,7 +354,7 @@ export default function ProdukPage() {
         <Modal title={form.id ? "Edit Produk" : form.unit_type === "kg" ? "Tambah Produk Timbang" : "Tambah Produk PCS"} onClose={() => setModalOpen(false)} wide>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Input alignRow label="Nama Produk" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input alignRow label="Nama Produk" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} hint="Tidak boleh sama dengan produk lain yang sudah ada." />
               <div className="grid row-span-3 [grid-template-rows:subgrid]">
                 <label className="text-sm font-medium mb-1.5 leading-snug self-end">Barcode Utama / SKU</label>
                 <div className="flex items-center gap-2 self-start">

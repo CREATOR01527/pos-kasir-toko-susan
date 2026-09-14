@@ -34,7 +34,28 @@ export default function QtyModal({ item, onConfirm, onClose }) {
           inputMode="decimal"
           className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-lg text-center outline-none focus:ring-2 focus:ring-primary/40"
         />
-        <p className="text-xs text-ink-muted mt-2 text-center">Ketik angka lalu tekan Enter</p>
+        {/* PENTING: sebelumnya modal ini TIDAK punya tombol sama sekali -- satu-satunya
+            cara konfirmasi cuma tekan Enter di keyboard fisik. Di HP/tablet, keyboard
+            layar angka (inputMode decimal) seringkali TIDAK punya tombol Enter yang
+            memicu event yang sama, jadi qty tidak bisa diubah sama sekali lewat sentuhan.
+            Ditambahkan tombol Batal & Simpan supaya tetap bisa dipakai tanpa keyboard fisik. */}
+        <div className="flex gap-2 mt-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 border border-border rounded-lg py-2.5 text-sm font-medium hover:bg-background"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            className="flex-1 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-primary-hover"
+          >
+            Simpan
+          </button>
+        </div>
+        <p className="text-xs text-ink-muted mt-2 text-center">Ketik angka lalu tekan Enter, atau pakai tombol di atas</p>
       </div>
     </div>
   );
