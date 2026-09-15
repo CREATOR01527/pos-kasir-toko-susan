@@ -59,6 +59,26 @@ export default function CabangPage() {
     }
   }
 
+  async function hardDelete(b) {
+    if (!confirm(`Hapus permanen cabang "${b.name}"? Ini hanya bisa dilakukan kalau cabang ini belum pernah punya transaksi, kasir, atau riwayat stok apa pun.`)) return;
+    try {
+      const { error } = await supabase.from("branches").delete().eq("id", b.id);
+      if (error) {
+        // Postgres melempar error kode 23503 kalau masih ada data lain (transaksi,
+        // kasir, dll) yang tertaut ke cabang ini -- pesan ini diterjemahkan supaya
+        // jelas, bukan ditampilkan mentah-mentah ke pengguna.
+        if (error.code === "23503") {
+          throw new Error("Tidak bisa dihapus permanen: cabang ini sudah punya transaksi/kasir/riwayat stok. Gunakan \"Nonaktifkan\" saja.");
+        }
+        throw error;
+      }
+      toast.success("Cabang dihapus permanen");
+      load();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -103,6 +123,7 @@ export default function CabangPage() {
                     <td className="py-2.5 text-right space-x-2">
                       <Button variant="ghost" onClick={() => { setForm(b); setModalOpen(true); }}>Edit</Button>
                       {b.active && <Button variant="danger" onClick={() => remove(b.id)}>Nonaktifkan</Button>}
+                      <Button variant="ghost" onClick={() => hardDelete(b)}>Hapus Permanen</Button>
                     </td>
                   </tr>
                 ))}
