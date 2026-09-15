@@ -62,13 +62,25 @@ export default function ReturPage() {
   }
 
   async function markPickedUp(r) {
-    await supabase.from("returns").update({ pickup_status: "sudah_diambil", picked_up_at: new Date().toISOString() }).eq("id", r.id);
+    const { data, error } = await supabase
+      .from("returns")
+      .update({ pickup_status: "sudah_diambil", picked_up_at: new Date().toISOString() })
+      .eq("id", r.id)
+      .select("id");
+    if (error) return toast.error(error.message);
+    if (!data || data.length === 0) return toast.error("Gagal menandai, coba muat ulang halaman.");
     toast.success("Ditandai sudah diambil, pindah ke riwayat");
     load();
   }
 
   async function markNotPickedUp(r) {
-    await supabase.from("returns").update({ pickup_status: "belum_diambil", picked_up_at: null }).eq("id", r.id);
+    const { data, error } = await supabase
+      .from("returns")
+      .update({ pickup_status: "belum_diambil", picked_up_at: null })
+      .eq("id", r.id)
+      .select("id");
+    if (error) return toast.error(error.message);
+    if (!data || data.length === 0) return toast.error("Gagal menandai, coba muat ulang halaman.");
     toast.success("Ditandai belum diambil, pindah ke daftar menunggu");
     load();
   }
@@ -143,7 +155,7 @@ export default function ReturPage() {
       <Card>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium mb-1.5">Pilih Barang</label>
+            <label className="text-sm font-medium mb-1.5 leading-snug flex items-end min-h-[2.5rem]">Pilih Barang</label>
             <div className="flex items-center gap-2">
               <Select value={form.product_id} onChange={(e) => setForm({ ...form, product_id: e.target.value })} className="flex-1">
                 <option value="">-- pilih (bisa scan barcode) --</option>

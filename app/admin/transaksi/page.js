@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { formatRupiah, formatNumber, formatDateTime } from "@/lib/format";
+import { formatRupiah, formatNumber, formatDateTime, txCode } from "@/lib/format";
 import { Card, EmptyState, Badge, Modal, Input, Select, Button } from "@/components/ui/kit";
 
 const PRICE_TYPE_LABELS = {
@@ -18,9 +18,6 @@ const PRICE_TYPE_LABELS = {
 const STATUS_LABELS = { completed: "Selesai", pending: "Tertunda", void: "Dibatalkan" };
 const STATUS_TONE = { completed: "primary", pending: "warning", void: "danger" };
 
-function txCode(id) {
-  return `TRX-${id.slice(0, 8).toUpperCase()}`;
-}
 
 export default function CekTransaksiPage() {
   const supabase = createClient();

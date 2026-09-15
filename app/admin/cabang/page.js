@@ -74,8 +74,8 @@ export default function CabangPage() {
 
       <Card>
         <p className="text-xs text-ink-muted mb-3">
-          Catatan: stok barang saat ini masih satu database bersama untuk semua cabang (belum dipisah per cabang).
-          Fitur ini baru memisahkan pencatatan transaksi & laporan penjualan per cabang.
+          Stok barang sudah dipisah per cabang (kelola di halaman Produk &amp; Harga, pilih cabangnya dulu). Produk baru
+          otomatis dapat stok 0 di semua cabang aktif — isi manual per cabang setelah itu.
         </p>
         {loading ? (
           <p className="text-sm text-ink-muted">Memuat...</p>

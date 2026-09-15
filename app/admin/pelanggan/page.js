@@ -65,7 +65,10 @@ export default function PelangganPage() {
 
   async function remove(id) {
     if (!confirm("Hapus pelanggan ini?")) return;
-    await supabase.from("customers").delete().eq("id", id);
+    const { data, error } = await supabase.from("customers").delete().eq("id", id).select("id");
+    if (error) return toast.error(error.message);
+    if (!data || data.length === 0) return toast.error("Pelanggan tidak bisa dihapus (kemungkinan masih punya transaksi/kasbon terkait).");
+    toast.success("Pelanggan dihapus");
     load();
   }
 

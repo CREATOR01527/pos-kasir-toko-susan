@@ -52,7 +52,10 @@ export default function SupplierPage() {
 
   async function remove(id) {
     if (!confirm("Hapus supplier ini?")) return;
-    await supabase.from("suppliers").delete().eq("id", id);
+    const { data, error } = await supabase.from("suppliers").delete().eq("id", id).select("id");
+    if (error) return toast.error(error.message);
+    if (!data || data.length === 0) return toast.error("Supplier tidak bisa dihapus (kemungkinan masih dipakai di pembelian/retur).");
+    toast.success("Supplier dihapus");
     load();
   }
 

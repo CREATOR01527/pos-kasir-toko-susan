@@ -1,6 +1,6 @@
 "use client";
 
-import { formatRupiah, formatNumber, formatDateTime } from "@/lib/format";
+import { formatRupiah, formatNumber, formatDateTime, txCode } from "@/lib/format";
 import { shareReceiptToWhatsApp } from "@/lib/shareReceipt";
 
 const PRICE_TYPE_LABELS = {
@@ -46,6 +46,7 @@ export default function ReceiptModal({ data, onPrint, onClose }) {
           </div>
           <hr className="border-dashed border-border my-2" />
           <div className="text-xs text-ink-muted">
+            <p className="font-semibold text-ink">{txCode(tx.id)}</p>
             <p>{formatDateTime(tx.created_at || new Date())}</p>
             {store?.receipt_show_cashier !== false && cashierName && <p>Kasir: {cashierName}</p>}
             {store?.receipt_show_customer !== false && customerName && <p>Pelanggan: {customerName}</p>}

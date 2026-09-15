@@ -115,7 +115,10 @@ export default function LabelBarcodePage() {
 
   async function deleteBarcode(id) {
     if (!confirm("Hapus barcode ini?")) return;
-    await supabase.from("product_barcodes").delete().eq("id", id);
+    const { data, error } = await supabase.from("product_barcodes").delete().eq("id", id).select("id");
+    if (error) return toast.error(error.message);
+    if (!data || data.length === 0) return toast.error("Barcode gagal dihapus, coba muat ulang halaman.");
+    toast.success("Barcode dihapus");
     load();
   }
 
@@ -150,7 +153,7 @@ export default function LabelBarcodePage() {
             {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </Select>
           <div>
-            <label className="block text-sm font-medium mb-1.5">Kode Barcode</label>
+            <label className="text-sm font-medium mb-1.5 leading-snug flex items-end min-h-[2.5rem]">Kode Barcode</label>
             <div className="flex items-center gap-2">
               <input
                 value={form.barcode}

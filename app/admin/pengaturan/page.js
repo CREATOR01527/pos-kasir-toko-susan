@@ -227,11 +227,11 @@ export default function PengaturanPage() {
             {LOGIN_FONT_WEIGHTS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
           </Select>
           <div>
-            <label className="block text-sm font-medium mb-1.5">Warna Judul</label>
+            <label className="text-sm font-medium mb-1.5 leading-snug flex items-end min-h-[2.5rem]">Warna Judul</label>
             <input type="color" value={form.login_font_color || "#111827"} onChange={(e) => setForm({ ...form, login_font_color: e.target.value })} className="h-10 w-full rounded-lg border border-border" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">Warna Aksen Tombol</label>
+            <label className="text-sm font-medium mb-1.5 leading-snug flex items-end min-h-[2.5rem]">Warna Aksen Tombol</label>
             <input type="color" value={form.login_accent_color || "#2563eb"} onChange={(e) => setForm({ ...form, login_accent_color: e.target.value })} className="h-10 w-full rounded-lg border border-border" />
           </div>
         </div>

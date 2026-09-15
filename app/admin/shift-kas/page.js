@@ -81,7 +81,10 @@ export default function ShiftKasPage() {
 
   async function deleteMovement(id) {
     if (!confirm("Hapus catatan ini?")) return;
-    await supabase.from("cash_movements").delete().eq("id", id);
+    const { data, error } = await supabase.from("cash_movements").delete().eq("id", id).select("id");
+    if (error) return toast.error(error.message);
+    if (!data || data.length === 0) return toast.error("Catatan gagal dihapus, coba muat ulang halaman.");
+    toast.success("Catatan dihapus");
     load();
   }
 
