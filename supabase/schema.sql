@@ -389,6 +389,13 @@ create policy "shortcuts_admin_all" on cashier_shortcuts for all using (is_admin
 create policy "shifts_select" on shifts for select using (cashier_id = auth.uid() or is_admin());
 create policy "shifts_insert" on shifts for insert with check (cashier_id = auth.uid() or is_admin());
 create policy "shifts_update" on shifts for update using (cashier_id = auth.uid() or is_admin());
+-- Shift hanya boleh dihapus kalau belum punya transaksi apa pun terkait
+-- (mencegah kehilangan riwayat penjualan yang sah). Ini juga dijaga oleh
+-- foreign key transactions.shift_id, tapi dicek eksplisit di sini supaya
+-- pesan errornya jelas di aplikasi, bukan gagal diam-diam seperti bug transaksi.
+create policy "shifts_delete" on shifts for delete using (
+  is_admin() and not exists (select 1 from transactions t where t.shift_id = shifts.id)
+);
 
 -- Kas & pengeluaran toko: semua user aktif lihat, admin kelola
 create policy "cash_select" on cash_movements for select using (is_active_user());
@@ -400,12 +407,22 @@ create policy "cash_admin_delete" on cash_movements for delete using (is_admin()
 create policy "trx_select" on transactions for select using (cashier_id = auth.uid() or is_admin());
 create policy "trx_insert" on transactions for insert with check (cashier_id = auth.uid() or is_admin());
 create policy "trx_update" on transactions for update using (cashier_id = auth.uid() or is_admin());
+create policy "trx_delete" on transactions for delete using (
+  (cashier_id = auth.uid() and status = 'pending') or is_admin()
+);
 
 create policy "trx_items_select" on transaction_items for select using (
   exists (select 1 from transactions t where t.id = transaction_id and (t.cashier_id = auth.uid() or is_admin()))
 );
 create policy "trx_items_insert" on transaction_items for insert with check (
   exists (select 1 from transactions t where t.id = transaction_id and (t.cashier_id = auth.uid() or is_admin()))
+);
+create policy "trx_items_delete" on transaction_items for delete using (
+  exists (
+    select 1 from transactions t
+    where t.id = transaction_id
+      and ((t.cashier_id = auth.uid() and t.status = 'pending') or is_admin())
+  )
 );
 
 -- Kasbon: semua user aktif lihat & catat, admin kelola penuh

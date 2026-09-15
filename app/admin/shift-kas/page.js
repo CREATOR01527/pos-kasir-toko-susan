@@ -85,6 +85,43 @@ export default function ShiftKasPage() {
     load();
   }
 
+  async function forceCloseShift(s) {
+    if (!confirm(`Tutup paksa shift ${s.profiles?.full_name} ini? Kas akhir akan disamakan dengan modal awal (Rp ${s.opening_cash}), sesuaikan manual kalau perlu lewat catatan kas.`)) return;
+    try {
+      const { error } = await supabase
+        .from("shifts")
+        .update({
+          status: "closed",
+          closing_time: new Date().toISOString(),
+          closing_cash: s.opening_cash,
+          expected_cash: s.opening_cash,
+          cash_difference: 0,
+          notes: `${s.notes ? s.notes + " | " : ""}Ditutup paksa oleh admin`,
+        })
+        .eq("id", s.id);
+      if (error) throw error;
+      toast.success("Shift ditutup paksa");
+      load();
+    } catch (err) {
+      toast.error(err.message || "Gagal menutup shift");
+    }
+  }
+
+  async function deleteShift(s) {
+    if (!confirm(`Hapus riwayat shift ${s.profiles?.full_name} ini? Hanya bisa dihapus kalau belum ada transaksi sama sekali di shift ini.`)) return;
+    try {
+      const { data, error } = await supabase.from("shifts").delete().eq("id", s.id).select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error("Tidak bisa dihapus: shift ini sudah punya transaksi. Gunakan \"Tutup Paksa\" saja.");
+      }
+      toast.success("Shift dihapus");
+      load();
+    } catch (err) {
+      toast.error(err.message || "Gagal menghapus shift");
+    }
+  }
+
   const monthMovements = cashMovements.filter((m) => m.movement_date >= startOfMonth());
   const monthExpense = monthMovements.filter((m) => m.type === "keluar").reduce((s, m) => s + Number(m.amount), 0);
   const monthIncome = monthMovements.filter((m) => m.type === "masuk").reduce((s, m) => s + Number(m.amount), 0);
@@ -154,7 +191,8 @@ export default function ShiftKasPage() {
                   <th className="text-left py-2 pr-3 font-medium">Mulai</th>
                   <th className="text-right py-2 pr-3 font-medium">Kas Akhir</th>
                   <th className="text-left py-2 pr-3 font-medium">Selesai</th>
-                  <th className="text-left py-2 font-medium">Status</th>
+                  <th className="text-left py-2 pr-3 font-medium">Status</th>
+                  <th className="text-right py-2 font-medium">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -166,6 +204,12 @@ export default function ShiftKasPage() {
                     <td className="py-2.5 pr-3 text-right">{s.closing_cash != null ? formatRupiah(s.closing_cash) : "-"}</td>
                     <td className="py-2.5 pr-3">{s.closing_time ? formatDateTime(s.closing_time) : "-"}</td>
                     <td className="py-2.5"><Badge tone={s.status === "open" ? "primary" : "default"}>{s.status === "open" ? "Berjalan" : "Selesai"}</Badge></td>
+                    <td className="py-2.5 text-right whitespace-nowrap">
+                      {s.status === "open" && (
+                        <button onClick={() => forceCloseShift(s)} className="text-xs text-ink-muted hover:text-primary mr-3">Tutup Paksa</button>
+                      )}
+                      <button onClick={() => deleteShift(s)} className="text-xs text-ink-muted hover:text-danger">Hapus</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
